@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  strategy:
+    type: Recreate
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      name: nginx
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx
+          resources:
+            requests:
+              cpu: 0.1
+              memory: 128M
+            limits:
+              cpu: 1.0
+              memory: 128M

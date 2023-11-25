@@ -1,0 +1,23 @@
+---
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: app-sa
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: webapp-inject
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "database"
+    vault.hashicorp.com/agent-inject-secret-database-config.txt: "secret/data/db-pass"
+    vault.hashicorp.com/agent-inject-template-database-config.txt: |
+      {{- with secret "secret/data/db-pass" -}}
+      {{ .Data.data.password }}
+      {{- end -}}
+spec:
+  serviceAccount: app-sa
+  containers:
+    - image: nginx
+      name: webapp

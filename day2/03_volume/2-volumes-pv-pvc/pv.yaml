@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: app-pv
+spec:
+  storageClassName: ""
+  capacity:
+    storage: 100Mi
+  accessModes:
+  - ReadWriteOnce
+  # ReadWriteMany
+  # ReadOnlyMany
+  # Once mounted by one of the options is not accessible
+  # anymore. So having 2 options specified means that
+  # only one access mode will be used and once used
+  # it will not be available for mount.
+  hostPath:
+    path: "/files"
+
+
+# In Windows use this path (after modifying) `/run/desktop/mnt/host/c/path/to/file`

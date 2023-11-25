@@ -16,3 +16,10 @@ kubectl get endpoints
 - REDIS_MASTER_PORT_6379_TCP_PROTO=tcp
 - REDIS_MASTER_PORT_6379_TCP_PORT=6379
 - REDIS_MASTER_PORT_6379_TCP_ADDR=10.0.0.11
+
+# Check Endpoints
+
+```sh
+kubectl get endpoints
+kubectl apply -f external-service.yaml
+```

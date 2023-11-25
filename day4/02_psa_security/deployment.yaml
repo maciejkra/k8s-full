@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+  namespace: my-baseline-namespace
+spec:
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      # securityContext:
+      #   runAsNonRoot: true
+      containers:
+      - name: myapp
+        image: nginx
+        resources: {}
+        # securityContext:
+        #   allowPrivilegeEscalation: false
+        #   capabilities:
+        #     drop:
+        #       - "ALL"
+        #   seccompProfile:
+        #     type: RuntimeDefault

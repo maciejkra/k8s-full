@@ -1,0 +1,32 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+kubeadmConfigPatches:
+- |-
+  kind: ClusterConfiguration
+  apiServer:
+    extraArgs:
+      oidc-client-id: 452556527381-p2l78q08vr0cn67vit17h27a9n1lbgg2.apps.googleusercontent.com
+      oidc-issuer-url: https://accounts.google.com
+      oidc-username-claim: email
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 80
+  - containerPort: 443
+    hostPort: 443
+- role: worker
+  extraPortMappings:
+  - containerPort: 32000
+    hostPort: 32000
+  extraMounts:
+  - hostPath: /Users/jamicque/Downloads
+    containerPath: /files
+- role: worker
+- role: worker

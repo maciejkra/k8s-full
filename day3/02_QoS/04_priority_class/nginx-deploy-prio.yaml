@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-prio
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-prio
+  template:
+    metadata:
+      name: nginx-prio
+      labels:
+        app: nginx-prio
+    spec:
+      priorityClassName: high-priority
+      containers:
+        - name: nginx
+          image: nginx
+          resources:
+            requests:
+              cpu: 5.0
+              memory: 128M
+            limits:
+              cpu: 5.0
+              memory: 128M
