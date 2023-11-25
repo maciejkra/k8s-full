@@ -1,0 +1,14 @@
+services:
+  python-api:
+    image: krajewskim/python-api:new
+    ports:
+      - 5002:5002
+    environment:
+      LOG_LEVEL: DEBUG
+      REDIS_HOST: redis
+  redis:
+    image: "redis:alpine"
+    volumes:
+      - db_data:/data
+volumes:
+  db_data:
