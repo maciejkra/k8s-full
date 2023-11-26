@@ -1,0 +1,7 @@
+10.135.0.5 cpnode1.example.com cpnode1
+10.135.0.6 cpnode2.example.com cpnode2
+10.135.0.3 cpnode3.example.com cpnode3
+10.135.0.4 knode1.example.com knode1
+10.135.0.2 knode2.example.com knode2
+10.135.0.7 knode3.example.com knode3
+10.135.0.100 kubeapi.example.com kubeapi

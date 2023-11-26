@@ -1,0 +1,81 @@
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: "10.135.0.5"
+nodeRegistration:
+  # required for ubuntu
+  ignorePreflightErrors:
+    - FileContent--proc-sys-net-bridge-bridge-nf-call-iptables
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+clusterName: "workshops"
+networking: # <-- important!!!
+  serviceSubnet: "10.96.0.0/16" # <-- IPs for Service ClusterIP
+  podSubnet: "10.244.0.0/24" # <-- IPs for Pods
+  dnsDomain: "cluster.local" # <-- leave it as default
+kubernetesVersion: "v1.28.2" # <-- make sure to match the installed tools
+controlPlaneEndpoint: "kubeapi.example.com:6443"
+scheduler:
+  extraArgs:
+    # required for prometheus metrics scapring
+    bind-address: 0.0.0.0
+controllerManager: # easier debugging for TopologyAwareRouting
+  extraArgs:
+    v: "2"
+    # required for prometheus metrics scapring
+    bind-address: 0.0.0.0
+etcd:
+  local:
+    extraArgs:
+      listen-metrics-urls: http://0.0.0.0:2381
+apiServer:
+  extraArgs:
+    authorization-mode: "Node,RBAC" # <-- important!!!
+    audit-policy-file: "/etc/kubernetes/audit-policy.yaml" # <--
+    audit-log-path: "/var/log/kubernetes/audit/audit.log" # <-- audit log file!
+    audit-log-maxbackup: "3" # <-- self explanatory
+    audit-log-maxsize: "10" # <-- self explanatory
+    audit-log-compress: "true" # <-- self explanatory
+    encryption-provider-config: "/etc/kubernetes/enc.yaml" # <-- define ecryption for etcd
+    event-ttl: "24h0m0s" # <-- change from default 1h!
+  extraVolumes: # <-- will be used by system Pods (as host volumes)
+    - name: "auditdir" # <-- required for audit
+      hostPath: "/var/log/kubernetes/audit/"
+      mountPath: "/var/log/kubernetes/audit/"
+      readOnly: false
+      pathType: DirectoryOrCreate
+    - name: "auditfile"
+      hostPath: "/etc/kubernetes/audit-policy.yaml"
+      mountPath: "/etc/kubernetes/audit-policy.yaml"
+      readOnly: true
+      pathType: File
+    - name: "encryption"
+      hostPath: "/etc/kubernetes/enc.yaml"
+      mountPath: "/etc/kubernetes/enc.yaml"
+      readOnly: true
+      pathType: File
+  certSANs: # <-- use these additional names in apiserver cert
+    - "10.135.0.5"
+    - "10.135.0.100"
+    - "kubeapi.example.com"
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+readOnlyPort: 0
+authentication:
+  anonymous:
+    enabled: false
+authorization:
+  mode: Webhook
+# use CSR and include proper SAN fields
+# serverTLSBootstrap: true
+
+---
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+kind: KubeProxyConfiguration
+# kube-proxy specific options here
+# mode: ipvs
+mode: iptables
+# prometheus metrics
+metricsBindAddress: 0.0.0.0:10249
