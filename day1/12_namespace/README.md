@@ -13,7 +13,7 @@ kubectl apply -f . -n <?>
 kubectl config set-context --current --namespace=<insert-namespace-name-here>
 ```
 But maybe there is an easier way?
-[Kubems/buectx](https://github.com/ahmetb/kubectx)
+[Kubens/kuectx](https://github.com/ahmetb/kubectx)
 
 Make life easier:
 * [Powershell 10k for zsh](https://github.com/romkatv/powerlevel10k)

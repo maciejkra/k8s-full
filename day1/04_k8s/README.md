@@ -31,5 +31,5 @@ kubectl get pods -v=9
 Instal konfig plugin and iport configuration
 ```sh
 kubectl krew install konfig
-konfig import -s <file>
+kubectl konfig import -s <file>
 ```
