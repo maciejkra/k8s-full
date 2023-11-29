@@ -4,7 +4,7 @@ metadata:
   name: users-readonly
 subjects:
 - kind: ServiceAccount
-  name: maciek-secret
+  name: maciek
   namespace: maciek
 roleRef:
   kind: ClusterRole 
