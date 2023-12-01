@@ -56,7 +56,7 @@ helm upgrade --install --atomic <release> workshop/hello-world -n <namespace> --
 ```
 or
 ```sh
-helm upgrade --install --atomic <release> workshop/hello-world -n <namespace> --create-namespace --set-file <value file>
+helm upgrade --install --atomic <release> workshop/hello-world -n <namespace> --create-namespace -f <value file>
 ```
 
 # Task :)
