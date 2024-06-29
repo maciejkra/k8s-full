@@ -65,9 +65,9 @@ Get some value from `workshop/hello-world` and update the release - check if it 
 If everything is ok perform rollback with
 
 ```sh
-helm status <release>           # This command shows the status of a named release.
-helm history <release>          # Historical revisions for a given release.
-helm rollback <release> <revision>
+helm status <release> -n <namespace>           # This command shows the status of a named release.
+helm history <release> -n <namespace>         # Historical revisions for a given release.
+helm rollback <release> <revision> -n <namespace>
 ```
 
 

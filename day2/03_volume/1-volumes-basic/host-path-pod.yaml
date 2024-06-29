@@ -11,6 +11,7 @@ spec:
   - name: host-path
     hostPath:
       path: /files
+# In Windows use this path (after modifying) `/run/desktop/mnt/host/c/path/to/file`
   containers:
   - name: host-path-pod-bb
     image: busybox

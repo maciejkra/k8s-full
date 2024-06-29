@@ -50,16 +50,16 @@ swapoff -a
 [ -d /etc/apt/keyrings ] || mkdir /etc/apt/keyrings
 # apt-transport-https may be a dummy package; if so, you can skip that package
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y apt-transport-https ca-certificates curl gpg
-curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-archive-keyring.gpg
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
 
 apt-get update
 
 #check the list of all packages
 #sudo apt list kubeadm -a
 
-sudo DEBIAN_FRONTEND=noninteractive apt-get install --allow-downgrades --allow-change-held-packages -y {kubelet,kubeadm,kubectl}=1.28.2-00
+sudo DEBIAN_FRONTEND=noninteractive apt-get install --allow-downgrades --allow-change-held-packages -y kubelet kubeadm kubectl
 
 # stop random updates
 
