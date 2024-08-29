@@ -82,7 +82,7 @@ helm pull workshop/hello-world --untar=true
 
 ## Remove the release
 ```sh
-helm uninstall <release>
+helm uninstall <release> -n <namespace> 
 ```
 
 
