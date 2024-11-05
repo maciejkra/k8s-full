@@ -7,7 +7,7 @@ metadata:
 spec:
   selector:
     matchLabels:
-      project: python
+      app.kubernetes.io/instance: python
   namespaceSelector:
     any: true
   endpoints:
@@ -50,5 +50,22 @@ roleRef:
   name: prometheus
 subjects:
 - kind: ServiceAccount
-  name: prometheus-k8s
+  name: kube-prometheus-stack-prometheus
   namespace: monitoring
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: python-alert
+spec:
+  groups:
+  - name: python-alerts
+    rules:
+    - alert: HighRequestRate  
+      expr: rate(info_requests_total[1m]) * 60 > 5  
+      for: 1m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Wysoki wskaźnik żądań"
+        description: "Metryka info_requests_created generuje więcej niż 5 żądań na minutę."
