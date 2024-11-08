@@ -46,7 +46,7 @@ kubectl get secrets -n <namespace>
 ## Check values
 ```sh
 helm show values workshop/hello-world # gets information about the chart
-helm get values <release> # gets information about the release
+helm get values <release> -n <namespace> # gets information about the release
 ```
 
 ## Customize values and upgrade
