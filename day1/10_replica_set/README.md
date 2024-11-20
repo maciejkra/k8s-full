@@ -7,13 +7,13 @@ kubectl get all
 ```sh
 kubectl apply -f pod.yaml
 kubectl get pod
+kubectl get events
 ```
 
 # delete pod
 ```sh
 kubectl delete pod myapp-pod
 kubectl get pod
-kubectl get events
 ```
 # scale replica
 ```sh
