@@ -52,7 +52,7 @@ sudo tar xzvfC cilium-linux-${CLI_ARCH}.tar.gz /usr/local/bin
 rm cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
 
 export KUBECONFIG=/etc/kubernetes/admin.conf
-cilium install --version 1.14.4
+cilium install --version 1.16.4
 ```
 
 ## Join other CP nodes

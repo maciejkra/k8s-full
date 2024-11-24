@@ -1,7 +1,44 @@
+resource "digitalocean_loadbalancer" "control_plane_lb" {
+  name        = "control-plane-lb"
+  region      = "fra1"
+  
+  forwarding_rule {
+    entry_protocol   = "tcp"
+    entry_port       = 443
+    target_protocol  = "tcp"
+    target_port      = 443
+  }
+
+  forwarding_rule {
+    entry_protocol   = "tcp"
+    entry_port       = 6443
+    target_protocol  = "tcp"
+    target_port      = 6443
+  }
+
+  forwarding_rule {
+    entry_protocol   = "tcp"
+    entry_port       = 80
+    target_protocol  = "tcp"
+    target_port      = 80
+  }
+
+  healthcheck {
+    protocol              = "tcp"
+    port                  = 6443
+    check_interval_seconds = 5
+    response_timeout_seconds = 3
+    healthy_threshold     = 3
+    unhealthy_threshold   = 3
+  }
+
+  droplet_tag = "control-plane"
+}
+
 resource "digitalocean_droplet" "cpnode" {
   count              = 3
   name               = "cpnode${count.index + 1}"
-  image              = "ubuntu-22-04-x64"
+  image              = "ubuntu-24-04-x64"
   region             = "fra1"
   size               = "s-2vcpu-4gb"
   tags               = ["control-plane"]
@@ -139,7 +176,7 @@ resource "digitalocean_droplet" "knode" {
 
 resource "null_resource" "hosts_file" {
   # Runs after droplets are created
-  depends_on = [digitalocean_droplet.cpnode, digitalocean_droplet.knode]
+  depends_on = [digitalocean_droplet.cpnode, digitalocean_droplet.knode, digitalocean_loadbalancer.control_plane_lb]
 
   provisioner "local-exec" {
     command = <<-EOT
@@ -149,8 +186,33 @@ ${digitalocean_droplet.cpnode.*.ipv4_address_private[2]} cpnode3.example.com cpn
 ${digitalocean_droplet.knode.*.ipv4_address_private[0]} knode1.example.com knode1\n\
 ${digitalocean_droplet.knode.*.ipv4_address_private[1]} knode2.example.com knode2\n\
 ${digitalocean_droplet.knode.*.ipv4_address_private[2]} knode3.example.com knode3\n\
-10.19.0.100 kubeapi.example.com kubeapi" > ../hosts
+${digitalocean_loadbalancer.control_plane_lb.ip} kubeapi.example.com kubeapi" > ../hosts
     EOT
+  }
+}
+
+resource "null_resource" "update_hosts" {
+  for_each = {
+    for i, addr in concat(digitalocean_droplet.cpnode.*.ipv4_address, digitalocean_droplet.knode.*.ipv4_address) : i => addr
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "echo '${digitalocean_droplet.cpnode.*.ipv4_address_private[0]} cpnode1.example.com cpnode1' >> /etc/hosts",
+      "echo '${digitalocean_droplet.cpnode.*.ipv4_address_private[1]} cpnode2.example.com cpnode2' >> /etc/hosts",
+      "echo '${digitalocean_droplet.cpnode.*.ipv4_address_private[2]} cpnode3.example.com cpnode3' >> /etc/hosts",
+      "echo '${digitalocean_droplet.knode.*.ipv4_address_private[0]} knode1.example.com knode1' >> /etc/hosts",
+      "echo '${digitalocean_droplet.knode.*.ipv4_address_private[1]} knode2.example.com knode2' >> /etc/hosts",
+      "echo '${digitalocean_droplet.knode.*.ipv4_address_private[2]} knode3.example.com knode3' >> /etc/hosts",
+      "echo '${digitalocean_loadbalancer.control_plane_lb.ip} kubeapi.example.com kubeapi' >> /etc/hosts"
+    ]
+
+    connection {
+      type        = "ssh"
+      host        = each.value
+      user        = "root"
+      private_key = file("~/.ssh/id_rsa")
+    }
   }
 }
 
