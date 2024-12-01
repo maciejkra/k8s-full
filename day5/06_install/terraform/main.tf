@@ -125,7 +125,7 @@ resource "digitalocean_droplet" "cpnode" {
 resource "digitalocean_droplet" "knode" {
   count              = 3
   name               = "knode${count.index + 1}"
-  image              = "ubuntu-22-04-x64"
+  image              = "ubuntu-24-04-x64"
   region             = "fra1"
   size               = "s-2vcpu-4gb"
   tags               = ["worker"]
