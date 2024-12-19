@@ -1,0 +1,44 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: pod-security.maciek
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:   ["apps"]
+      apiVersions: ["v1"]
+      operations:  ["CREATE", "UPDATE"]
+      resources:   ["deployments"]
+  variables:
+  - name: containers
+    expression: object.spec.template.spec.containers
+  - name: securityContexts
+    expression: 'variables.containers.map(c, c.?securityContext)'
+  validations:
+  - expression: variables.securityContexts.all(c, c.?runAsNonRoot == optional.of(true))
+    message: 'all containers must set runAsNonRoot to true'
+  - expression: variables.securityContexts.all(c, c.?readOnlyRootFilesystem == optional.of(true))
+    message: 'all containers must set readOnlyRootFilesystem to true'
+  - expression: variables.securityContexts.all(c, c.?allowPrivilegeEscalation != optional.of(true))
+    message: 'all containers must NOT set allowPrivilegeEscalation to true'
+  - expression: variables.securityContexts.all(c, c.?privileged != optional.of(true))
+    message: 'all containers must NOT set privileged to true'
+  - expression: variables.containers.all(c, has(c.resources) && has(c.resources.requests) && has(c.resources.requests.cpu) && has(c.resources.requests.memory))
+    message: 'All containers must set both CPU and memory requests.'
+  - expression: variables.containers.all(c, !has(c.resources.limits.cpu))
+    message: 'Containers must not set CPU limits.'
+  - expression: variables.containers.all(c, has(c.resources.limits.memory) && c.resources.limits.memory == c.resources.requests.memory)
+    message: 'Memory limits must be set and equal to memory requests for all containers.'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: pod-security.policy-binding.maciek
+spec:
+  policyName: pod-security.maciek
+  validationActions: ["Deny"]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        "kubernetes.io/metadata.name": "maciek"
