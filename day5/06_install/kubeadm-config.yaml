@@ -13,7 +13,7 @@ networking:
   serviceSubnet: "10.96.0.0/16"
   podSubnet: "10.244.0.0/24"
   dnsDomain: "cluster.local"
-kubernetesVersion: "v1.31.0"
+kubernetesVersion: "v1.32.1"
 controlPlaneEndpoint: "kubeapi.example.com:6443"
 scheduler:
   extraArgs:
@@ -30,6 +30,18 @@ etcd:
     extraArgs:
       - name: "listen-metrics-urls"
         value: "http://0.0.0.0:2381"
+      - name: "listen-peer-urls"
+        value: "https://10.135.0.5:2380"
+      - name: "listen-client-urls"
+        value: "https://10.135.0.5:2379,https://127.0.0.1:2379"
+      - name: "initial-advertise-peer-urls"
+        value: "https://10.135.0.5:2380"
+      - name: "advertise-client-urls"
+        value: "https://10.135.0.5:2379,https://127.0.0.1:2379"
+      - name: "initial-cluster"
+        value: "cpnode1=https://10.135.0.5:2380,cpnode2=https://10.135.0.7:2380,cpnode3=https://10.135.0.3:2380"
+      - name: "initial-cluster-state"
+        value: "new"
 apiServer:
   extraArgs:
     - name: "authorization-mode"
@@ -66,8 +78,13 @@ apiServer:
       pathType: File
   certSANs:
     - "10.135.0.5"
+    - "10.135.0.7"
+    - "10.135.0.3"
     - "10.135.0.100"
     - "kubeapi.example.com"
+    - "165.22.81.139"
+    - "167.71.53.137"
+    - "161.35.66.7"
 ---
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
