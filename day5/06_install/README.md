@@ -51,8 +51,9 @@ sha256sum --check cilium-linux-${CLI_ARCH}.tar.gz.sha256sum
 sudo tar xzvfC cilium-linux-${CLI_ARCH}.tar.gz /usr/local/bin
 rm cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
 
+
 export KUBECONFIG=/etc/kubernetes/admin.conf
-cilium install --version 1.16.6
+cilium install --version 1.17.6
 ```
 
 ## Join other CP nodes
@@ -116,3 +117,25 @@ ip a d dev eth1 10.135.0.100/24
 On one control-plane node run `kube-vip.sh` script (edit first `VIP_IF` & `VIP_IP`).
 
 Have FUN!
+
+## More fun....
+
+```sh
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx --create-namespace \
+  --set controller.kind=DaemonSet \
+  --set controller.daemonset.useHostPort=true \
+  --set controller.hostNetwork=true \
+  --set controller.service.type="" \
+  --set controller.service.enabled=false \
+  --set controller.admissionWebhooks.enabled=false \
+  --set controller.extraArgs.enable-ssl-passthrough="" \
+  --set controller.nodeSelector."node-role\.kubernetes\.io/control-plane"="" \
+  --set controller.tolerations\[0\].key="node-role.kubernetes.io/control-plane" \
+  --set controller.tolerations\[0\].operator="Exists" \
+  --set controller.tolerations\[0\].effect="NoSchedule"
+```
+

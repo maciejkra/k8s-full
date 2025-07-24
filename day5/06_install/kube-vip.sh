@@ -9,9 +9,10 @@ cat <<EOF | kubectl apply -f-
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
+  creationTimestamp: null
   labels:
     app.kubernetes.io/name: kube-vip-ds
-    app.kubernetes.io/version: v0.8.7
+    app.kubernetes.io/version: v0.9.2
   name: kube-vip-ds
   namespace: kube-system
 spec:
@@ -20,9 +21,10 @@ spec:
       app.kubernetes.io/name: kube-vip-ds
   template:
     metadata:
+      creationTimestamp: null
       labels:
         app.kubernetes.io/name: kube-vip-ds
-        app.kubernetes.io/version: v0.8.7
+        app.kubernetes.io/version: v0.9.2
     spec:
       affinity:
         nodeAffinity:
@@ -42,20 +44,28 @@ spec:
           value: "true"
         - name: port
           value: "6443"
+        - name: vip_nodename
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         - name: vip_interface
-          value: $VIP_IF
-        - name: vip_cidr
+          value: ${VIP_IF}
+        - name: vip_subnet
           value: "32"
+        - name: dns_mode
+          value: first
         - name: cp_enable
           value: "true"
         - name: cp_namespace
           value: kube-system
-        - name: vip_ddns
-          value: "false"
         - name: svc_enable
           value: "true"
+        - name: svc_leasename
+          value: plndr-svcs-lock
         - name: vip_leaderelection
           value: "true"
+        - name: vip_leasename
+          value: plndr-cp-lock
         - name: vip_leaseduration
           value: "5"
         - name: vip_renewdeadline
@@ -63,13 +73,11 @@ spec:
         - name: vip_retryperiod
           value: "1"
         - name: address
-          value: $VIP_IP
-        - name: enableServicesElection
-          value: "true"
+          value: ${VIP_IP}
         - name: prometheus_server
           value: :2112
-        image: ghcr.io/kube-vip/kube-vip:v0.8.7
-        imagePullPolicy: Always
+        image: ghcr.io/kube-vip/kube-vip:v0.9.2
+        imagePullPolicy: IfNotPresent
         name: kube-vip
         resources: {}
         securityContext:
@@ -77,6 +85,8 @@ spec:
             add:
             - NET_ADMIN
             - NET_RAW
+            drop:
+            - ALL
       hostNetwork: true
       serviceAccountName: kube-vip
       tolerations:
@@ -84,4 +94,5 @@ spec:
         operator: Exists
       - effect: NoExecute
         operator: Exists
+  updateStrategy: {}
 EOF

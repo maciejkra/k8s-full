@@ -25,23 +25,6 @@ controllerManager:
       value: "2"
     - name: "bind-address"
       value: "0.0.0.0"
-etcd:
-  local:
-    extraArgs:
-      - name: "listen-metrics-urls"
-        value: "http://0.0.0.0:2381"
-      - name: "listen-peer-urls"
-        value: "https://10.135.0.5:2380"
-      - name: "listen-client-urls"
-        value: "https://10.135.0.5:2379,https://127.0.0.1:2379"
-      - name: "initial-advertise-peer-urls"
-        value: "https://10.135.0.5:2380"
-      - name: "advertise-client-urls"
-        value: "https://10.135.0.5:2379,https://127.0.0.1:2379"
-      - name: "initial-cluster"
-        value: "cpnode1=https://10.135.0.5:2380,cpnode2=https://10.135.0.7:2380,cpnode3=https://10.135.0.3:2380"
-      - name: "initial-cluster-state"
-        value: "new"
 apiServer:
   extraArgs:
     - name: "authorization-mode"

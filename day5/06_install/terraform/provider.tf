@@ -8,7 +8,7 @@ terraform {
 }
 
 provider "digitalocean" {
-  token = :)
+  token = ":)"
 }
 
 variable "pvt_key" {
