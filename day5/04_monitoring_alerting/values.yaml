@@ -8,3 +8,7 @@ prometheus:
 kubeEtcd:
   service:
     targetPort: 2381
+
+global:
+  rbac:
+    createAggregateClusterRoles: true
