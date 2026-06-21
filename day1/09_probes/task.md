@@ -1,12 +1,12 @@
-### Add readyness & liveness probe to python pod
+# Zadanie
 
-* Redyness - should check TCP port
-* Liveness - should check endpoint `/healthz` via HTTP
+Dodaj `readiness` i `liveness` probe do Pod-a python:
 
-If the taks is completed the application should restart every 30 seconds and be ready all the time.
+1. `readiness` — sprawdza port TCP.
+2. `liveness` — sprawdza endpoint `/healthz` przez HTTP.
+3. Po poprawnej konfiguracji aplikacja powinna restartować się co ~30 sekund i przez cały czas pozostawać `Ready`.
+4. Sprawdź events w `describe pod` — jakie wpisy się pojawiły?
 
-You can also run
 ```sh
 kubectl describe pods <podname>
 ```
-and check events.

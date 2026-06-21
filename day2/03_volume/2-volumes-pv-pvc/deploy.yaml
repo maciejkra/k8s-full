@@ -34,10 +34,7 @@ spec:
         image: nginx
         ports:
         - containerPort: 80
-        resources:
-          limits:
-            memory: "128Mi"
-            cpu: "500m"
+        resources: {}
         volumeMounts:
         - mountPath: /usr/share/nginx/html
           name: pvc-volume

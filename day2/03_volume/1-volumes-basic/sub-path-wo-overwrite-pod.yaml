@@ -25,9 +25,6 @@ spec:
     - name: cm
       mountPath: /etc/appsettings.json # only key specified here will be taken
       subPath: appsettings.json # updating by cm change does not work
-    resources:
-      limits:
-        memory: "128Mi"
-        cpu: "500m"
+    resources: {}
     ports:
       - containerPort: 8080

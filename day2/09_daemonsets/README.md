@@ -1,3 +1,0 @@
-```sh
-kubectl apply -f .
-```

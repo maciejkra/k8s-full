@@ -1,0 +1,22 @@
+# PodMonitor — Prometheus Operator scrape'uje Pody bezpośrednio (po labelach Poda),
+# bez pośrednictwa Service. `port` to nazwa portu KONTENERA (api → 5002).
+# podTargetLabels: [app] kopiuje label `app=python` na wszystkie metryki (w tym `up`),
+# dzięki czemu alerty mogą filtrować po app="python" niezależnie od nazwy release'u.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: python-api
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: python
+  namespaceSelector:
+    any: true
+  podTargetLabels:
+    - app
+  podMetricsEndpoints:
+    - port: api
+      path: /metrics
+      interval: 30s

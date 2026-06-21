@@ -1,0 +1,37 @@
+# Routing po nazwie domeny — dwa HTTPRoute, dwa różne hostnames, ten sam Gateway.
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: python-domain
+spec:
+  parentRefs:
+    - name: training-gateway
+  hostnames:
+    - python.127-0-0-1.nip.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: python-service       # z D1/10 (Service :80 → pod :5002)
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: nginx-domain
+spec:
+  parentRefs:
+    - name: training-gateway
+  hostnames:
+    - nginx.127-0-0-1.nip.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: demo-app             # z app.yaml
+          port: 80

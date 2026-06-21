@@ -1,0 +1,56 @@
+# Weighted routing przez Gateway API (Envoy Gateway z D2/07).
+# Zmieniaj `weight` poniżej, by stopniowo przesuwać ruch z prod → canary.
+#
+# Etapy typowego canary release:
+#   100/0  →  80/20  →  50/50  →  20/80  →  0/100
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: canary-demo
+  namespace: default            # ten sam namespace co Gateway 'training-gateway' z D2/07
+spec:
+  parentRefs:
+    - name: training-gateway
+  hostnames:
+    - canary-demo.127-0-0-1.nip.io
+  rules:
+    - backendRefs:
+        - name: demo-prod
+          namespace: demo-prod
+          port: 80
+          weight: 80            # ZMIEŃ — początkowo 100, potem stopniowo zmniejszaj
+        - name: demo-canary
+          namespace: demo-canary
+          port: 80
+          weight: 20            # ZMIEŃ — początkowo 0, potem stopniowo zwiększaj
+---
+# ReferenceGrant pozwala HTTPRoute z 'default' używać Service-ów z 'demo-prod'
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: from-default-httproute
+  namespace: demo-prod
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: default
+  to:
+    - group: ""
+      kind: Service
+---
+# Analogicznie dla 'demo-canary'
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: from-default-httproute
+  namespace: demo-canary
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: default
+  to:
+    - group: ""
+      kind: Service

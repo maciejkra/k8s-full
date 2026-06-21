@@ -1,0 +1,18 @@
+# HTTPRoute dla TLS demo (Część 3) — kieruje do Python z D1/10 na domenie z cert-manager
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: python-tls
+spec:
+  parentRefs:
+    - name: training-gateway
+  hostnames:
+    - python.<TWOJ-PUBLICZNY-IP>.nip.io   # ZMIEŃ — musi się zgadzać z certificate.yaml
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: python-service
+          port: 80

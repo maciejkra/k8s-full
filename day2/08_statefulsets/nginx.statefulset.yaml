@@ -3,12 +3,13 @@ kind: Service
 metadata:
   name: stsf-service
 spec:
-  clusterIP: None
+  clusterIP: None        # headless — daje per-Pod DNS: nginx-stsf-N.stsf-service.default.svc
   selector:
     app: stsf
   ports:
   - protocol: TCP
     port: 80
+    name: http
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -24,24 +25,21 @@ spec:
       app: stsf
   template:
     metadata:
-      name: stsf
       labels:
         app: stsf
     spec:
       containers:
-      - name: stsf-container
-        image: nginx
+      - name: nginx
+        image: nginx:1.27-alpine
         ports:
           - containerPort: 80
-        env:
-          - name: TEST
-            value: RETEST
+            name: http
         volumeMounts:
-        - name: nginx-local-claim
-          mountPath: /usr/local/nginx/html
+        - name: nginx-html
+          mountPath: /usr/share/nginx/html    # poprawna ścieżka serwowania dla nginx (nie /usr/local)
   volumeClaimTemplates:
   - metadata:
-      name: nginx-local-claim
+      name: nginx-html
     spec:
       accessModes:
       - ReadWriteOnce

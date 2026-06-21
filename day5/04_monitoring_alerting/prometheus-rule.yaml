@@ -1,0 +1,45 @@
+# PrometheusRule CRD — Prometheus Operator automatycznie podnosi regułę i przekazuje do Prometheus.
+# Alerty na REALNYCH metrykach aplikacji python-api (https://github.com/maciejkra/python-api):
+#   - info_requests_total            (Counter — inkrementowany na /api/v1/info)
+#   - process_resident_memory_bytes  (domyślna z prometheus_client)
+#   - up                             (syntetyczna per-target; label app=python z podTargetLabels)
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: python-api-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack   # matchuje ruleSelector Prometheus Operator
+spec:
+  groups:
+    - name: python-api
+      rules:
+        - alert: PythonApiDown
+          expr: up{app="python"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "python-api nie odpowiada na scrape ({{ $labels.namespace }}/{{ $labels.pod }})"
+            description: "Target {{ $labels.namespace }}/{{ $labels.pod }} ma up=0 od 2 min — proces padł albo /metrics nie odpowiada."
+            runbook_url: "https://runbooks.example.com/python-api-down"
+
+        - alert: PythonApiHighRequestRate
+          expr: sum by (namespace, pod) (rate(info_requests_total{app="python"}[5m])) * 60 > 60
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Wysoki ruch na /api/v1/info ({{ $labels.pod }})"
+            description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} obsługuje {{ $value | humanize }} req/min na /api/v1/info (próg 60)."
+            runbook_url: "https://runbooks.example.com/python-api-high-rate"
+
+        - alert: PythonApiHighMemory
+          expr: process_resident_memory_bytes{app="python"} / 1024 / 1024 > 200
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Wysokie zużycie pamięci python-api ({{ $labels.pod }})"
+            description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} zużywa {{ $value | humanize }}MB RSS (próg 200MB)."
+            runbook_url: "https://runbooks.example.com/python-api-high-memory"

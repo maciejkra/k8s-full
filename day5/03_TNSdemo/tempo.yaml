@@ -1,0 +1,26 @@
+# Minimalny config Tempo 2.x (1.x konfigurowalo sie flagami CLI - juz nie dziala).
+# Aplikacje TNS wysylaja trace'y jako Jaeger thrift_http na port 14268.
+server:
+  http_listen_port: 80
+
+distributor:
+  receivers:
+    jaeger:
+      protocols:
+        thrift_http:
+          endpoint: 0.0.0.0:14268
+
+ingester:
+  trace_idle_period: 10s
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+compactor:
+  compaction:
+    block_retention: 24h

@@ -24,7 +24,4 @@ spec:
     volumeMounts:
     - name: cm
       mountPath: /etc
-    resources:
-      limits:
-        memory: "128Mi"
-        cpu: "500m"
+    resources: {}

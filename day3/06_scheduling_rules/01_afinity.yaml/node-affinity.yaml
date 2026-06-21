@@ -1,0 +1,30 @@
+# Demo nodeAffinity: twardy warunek (required) + miękki (preferred).
+# Pod ląduje TYLKO na nodzie z label disk-type=ssd (required),
+# preferowany jest node z region=eu-central (preferred, weight 50).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: node-affinity-demo
+  labels:
+    app: affinity-demo
+spec:
+  affinity:
+    nodeAffinity:
+      # TWARDY warunek — bez tego Pod Pending
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: disk-type
+                operator: In
+                values: [ssd, nvme]
+      # MIĘKKA preferencja — weight 1-100, wybiera z matching node'ów
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 50
+          preference:
+            matchExpressions:
+              - key: region
+                operator: In
+                values: [eu-central, eu-west]
+  containers:
+    - name: pause
+      image: registry.k8s.io/pause:3.10

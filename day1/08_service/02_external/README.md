@@ -3,9 +3,10 @@ kubectl apply -f google-service.yaml
 kubectl exec -ti myapp-pod -- curl google-service
 ```
 
+```sh
 kubectl get svc
 kubectl get endpoints
-
+```
 
 # Default ENV exposed example
 

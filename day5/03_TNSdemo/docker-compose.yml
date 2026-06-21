@@ -1,7 +1,7 @@
 x-logging: &default-logging
   driver: loki
   options:
-    loki-url: 'http://localhost:3100/api/prom/push'
+    loki-url: 'http://localhost:3100/loki/api/v1/push'
     labels: namespace
     loki-relabel-config: |
       - action: replace
@@ -66,7 +66,7 @@ services:
     logging: *default-logging
 
   grafana:
-    image: grafana/grafana:9.5.3
+    image: grafana/grafana:latest
     volumes:
       - ./datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
       - ./dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
@@ -82,7 +82,7 @@ services:
     logging: *default-logging
 
   prometheus:
-    image: prom/prometheus:v2.30.3
+    image: prom/prometheus:v3.5.3
     user: root
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -105,11 +105,9 @@ services:
 
 
   loki:
-    image: grafana/loki:2.3.0
+    image: grafana/loki:3.7.2
     command:
       - -config.file=/etc/loki/local-config.yaml
-      - -table-manager.retention-period=1d
-      - -table-manager.retention-deletes-enabled=true
     ports:
       - "3100:3100"
     labels:
@@ -117,13 +115,11 @@ services:
     logging: *default-logging
 
   tempo:
-    image: grafana/tempo:1.1.0
+    image: grafana/tempo:2.8.1
     command:
-      - --target=all
-      - --storage.trace.backend=local
-      - --storage.trace.local.path=/var/tempo
-      - --auth.enabled=false
-      - --compactor.compaction.block-retention=24h
+      - -config.file=/etc/tempo/tempo.yaml
+    volumes:
+      - ./tempo.yaml:/etc/tempo/tempo.yaml
     ports:
       - "8004:80"
     labels:

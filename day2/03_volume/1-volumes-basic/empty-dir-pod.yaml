@@ -15,18 +15,12 @@ spec:
     volumeMounts:
     - name: empty
       mountPath: /pod-empty/
-    resources:
-      limits:
-        memory: "128Mi"
-        cpu: "500m"
+    resources: {}
   - name: empty-pod-bb2
     image: busybox
     command: ['sh', '-c', 'echo running! && sleep 3600']
     volumeMounts:
     - name: empty
       mountPath: /empty-pod/
-    resources:
-      limits:
-        memory: "128Mi"
-        cpu: "500m"
+    resources: {}
 

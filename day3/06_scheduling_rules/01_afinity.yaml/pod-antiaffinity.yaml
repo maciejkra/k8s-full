@@ -1,0 +1,31 @@
+# Demo podAntiAffinity: Deployment z 3 replikami, każda na innym node (hostname).
+# Wzorzec produkcyjny dla HA baz danych (Redis Cluster, PostgreSQL Patroni, itp.).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ha-db-demo
+  labels:
+    app: ha-db
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ha-db
+  template:
+    metadata:
+      labels:
+        app: ha-db
+    spec:
+      affinity:
+        podAntiAffinity:
+          # TWARDY warunek: żaden Pod z labelem app=ha-db nie może być na tym samym hostname
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: ha-db
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.10
+          resources:
+            requests: { cpu: 10m, memory: 20Mi }

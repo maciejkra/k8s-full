@@ -28,10 +28,12 @@ nodes:
     nodeRegistration:
       kubeletExtraArgs:
         node-labels: "ingress-ready=true"
+  # NodePort mapping — Kind nie ma cloud-providera, dataplane Envoy działa
+  # przez Service NodePort 30080/30443 (patrz day2/07_gateway_api/envoyproxy-kind.yaml).
   extraPortMappings:
-  - containerPort: 80
+  - containerPort: 30080
     hostPort: 80
-  - containerPort: 443
+  - containerPort: 30443
     hostPort: 443
 - role: worker
   extraPortMappings:

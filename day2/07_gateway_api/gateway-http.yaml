@@ -1,0 +1,24 @@
+# Gateway dla Część 1-4 — tylko listener HTTP:80.
+# GatewayClass `eg` aplikujemy tu (powinien istnieć w klastrze przed użyciem
+# httproute-uri/-domain). Część 5 (TLS) — apply gateway-https.yaml dorzuca
+# listener HTTPS:443 przez ten sam metadata.name (apply nadpisze).
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: training-gateway
+spec:
+  gatewayClassName: eg
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All

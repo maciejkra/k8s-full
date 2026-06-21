@@ -1,0 +1,34 @@
+# Gateway dla Część 5 (TLS) — dorzuca listener HTTPS:443 obok HTTP:80.
+# Aplikuj DOPIERO gdy Secret `app-tls` istnieje (cert-manager Certificate flow):
+#   kubectl apply -f cluster-issuer-letsencrypt.yaml
+#   kubectl apply -f certificate.yaml
+#   kubectl wait --for=condition=Ready certificate/app-tls --timeout=5m
+#   kubectl apply -f gateway-https.yaml   # ← tu
+#
+# Bez Secret-u listener `https` zostaje Invalid (Reason: InvalidCertificateRef)
+# i Gateway top-level PROGRAMMED=False — mylące, wygląda jakby HTTP nie działał.
+# Dlatego Część 1-4 używają gateway-http.yaml (tylko HTTP).
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: training-gateway
+spec:
+  gatewayClassName: eg
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: app-tls
+      allowedRoutes:
+        namespaces:
+          from: All

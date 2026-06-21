@@ -1,0 +1,41 @@
+# Override TYLKO dla Kind. K3s/K3d nie aplikują tego pliku.
+#
+# Dlaczego: Kind nie ma cloud-providera, więc Service typu LoadBalancer (default
+# Envoy Gateway dataplane'u) wisi w EXTERNAL-IP=<pending>. Patch wymusza:
+#   1) Service NodePort z fixed portami 30080/30443
+#   2) pod Envoy proxy na control-plane (gdzie kind.yaml mapuje
+#      hostPort 80→containerPort 30080 i hostPort 443→containerPort 30443).
+#
+# Po apply (raz, przed pierwszym Gateway) podepnij CR pod GatewayClass `eg`:
+#   kubectl patch gatewayclass eg --type=merge -p \
+#     '{"spec":{"parametersRef":{"group":"gateway.envoyproxy.io","kind":"EnvoyProxy","name":"kind-control-plane","namespace":"envoy-gateway-system"}}}'
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: kind-control-plane
+  namespace: envoy-gateway-system
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: NodePort
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+                - name: http-80
+                  port: 80
+                  nodePort: 30080
+                - name: https-443
+                  port: 443
+                  nodePort: 30443
+      envoyDeployment:
+        pod:
+          nodeSelector:
+            ingress-ready: "true"
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule

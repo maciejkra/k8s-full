@@ -1,0 +1,39 @@
+# Demo Topology Spread Constraints — rozłóż 5 replik równomiernie po hostname.
+# maxSkew: 1 = między dowolnymi dwoma hostname różnica replik ≤ 1.
+# W klastrze z 3 nodów: 2-2-1 lub 2-1-2 jest OK, ale 3-1-1 łamie constraint.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tsc-demo
+  labels:
+    app: tsc-demo
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: tsc-demo
+  template:
+    metadata:
+      labels:
+        app: tsc-demo
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule    # Pending jeśli nie da się zspreadować
+          labelSelector:
+            matchLabels:
+              app: tsc-demo
+        # Drugi constraint — rozkład po strefach (gdyby klaster był multi-AZ).
+        # Na K3d/Kind single-AZ to no-op, ale pokazuje wzorzec produkcyjny.
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway   # soft — klastry single-AZ nadal działają
+          labelSelector:
+            matchLabels:
+              app: tsc-demo
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.10
+          resources:
+            requests: { cpu: 10m, memory: 20Mi }

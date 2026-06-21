@@ -1,0 +1,13 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: app-tls
+spec:
+  secretName: app-tls          # cert-manager utworzy ten Secret
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - python.209.38.189.73.nip.io   # ZMIEŃ — np. python.203-0-113-7.nip.io
+  duration: 2160h               # 90 dni
+  renewBefore: 360h             # odnowienie 15 dni przed wygaśnięciem

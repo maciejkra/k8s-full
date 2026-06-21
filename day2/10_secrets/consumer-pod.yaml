@@ -1,0 +1,43 @@
+# Pod konsumujący Secret na dwa sposoby jednocześnie:
+#   1) env vars (przez envFrom: secretRef)
+#   2) zamontowany pod /etc/secret (każdy klucz = plik)
+#
+# Obserwacja dydaktyczna: volumes są automatycznie refreshowane (~minutę lag),
+# env vars NIE — wymagają restartu Poda po zmianie Secret.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secret-consumer
+  labels:
+    app: demo
+spec:
+  restartPolicy: Always
+  containers:
+    - name: demo
+      image: busybox:1.37
+      command: ["sh", "-c"]
+      args:
+        - |
+          echo "=== ENV ==="
+          echo "DB_USER=$DB_USER"
+          echo "DB_PASSWORD=$DB_PASSWORD"
+          echo "=== VOLUME ==="
+          ls -la /etc/secret/
+          cat /etc/secret/db-user; echo
+          cat /etc/secret/db-password; echo
+          # sleep żeby Pod żył i można było `kubectl exec`
+          sleep 3600
+      # 1) env vars z Secret
+      envFrom:
+        - secretRef:
+            name: app-credentials
+      # 2) volume mount z Secret
+      volumeMounts:
+        - name: creds
+          mountPath: /etc/secret
+          readOnly: true
+  volumes:
+    - name: creds
+      secret:
+        secretName: app-credentials
+        defaultMode: 0400   # tylko root może czytać (best practice dla wrażliwych plików)
