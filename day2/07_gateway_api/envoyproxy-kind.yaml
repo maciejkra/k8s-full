@@ -1,10 +1,16 @@
-# Override TYLKO dla Kind. K3s/K3d nie aplikują tego pliku.
+# Override TYLKO dla Kind. Docker Desktop / K3d / managed tego NIE potrzebują.
 #
 # Dlaczego: Kind nie ma cloud-providera, więc Service typu LoadBalancer (default
-# Envoy Gateway dataplane'u) wisi w EXTERNAL-IP=<pending>. Patch wymusza:
-#   1) Service NodePort z fixed portami 30080/30443
-#   2) pod Envoy proxy na control-plane (gdzie kind.yaml mapuje
-#      hostPort 80→containerPort 30080 i hostPort 443→containerPort 30443).
+# Envoy Gateway dataplane'u) wisi w EXTERNAL-IP=<pending> i ruch z hosta go nie dosięga.
+# Patch wymusza:
+#   1) pod Envoy proxy na control-plane (jedyny node z `ingress-ready=true`
+#      i z mapowaniem portów 80/443 na host — patrz day1/04_k8s/kind.yaml)
+#   2) hostPort 80/443 na tym podzie
+#
+# WAŻNE — offset portów: Envoy nasłuchuje na porcie listenera +10000 (jako nie-root
+# nie zbinduje portów <1024). Listener 80 → kontener 10080, listener 443 → kontener 10443.
+# Dlatego hostPort 80 mapujemy na containerPort 10080, a 443 na 10443.
+# Przepływ na Kind: host:80 → node:80 (kind.yaml) → hostPort → Envoy:10080.
 #
 # Po apply (raz, przed pierwszym Gateway) podepnij CR pod GatewayClass `eg`:
 #   kubectl patch gatewayclass eg --type=merge -p \
@@ -19,18 +25,7 @@ spec:
     type: Kubernetes
     kubernetes:
       envoyService:
-        type: NodePort
-        patch:
-          type: StrategicMerge
-          value:
-            spec:
-              ports:
-                - name: http-80
-                  port: 80
-                  nodePort: 30080
-                - name: https-443
-                  port: 443
-                  nodePort: 30443
+        type: ClusterIP        # nie LoadBalancer — i tak wisiałby pending na Kind
       envoyDeployment:
         pod:
           nodeSelector:
@@ -39,3 +34,20 @@ spec:
             - key: node-role.kubernetes.io/control-plane
               operator: Exists
               effect: NoSchedule
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: envoy
+                      ports:
+                        - name: http
+                          containerPort: 10080
+                          hostPort: 80
+                          protocol: TCP
+                        - name: https
+                          containerPort: 10443
+                          hostPort: 443
+                          protocol: TCP

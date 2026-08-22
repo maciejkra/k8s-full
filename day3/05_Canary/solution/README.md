@@ -9,7 +9,7 @@
    [Envoy Gateway]  (D2/07 training-gateway)
          │
          ▼
-   [HTTPRoute canary-demo]  ← weighted routing 70/30
+   [HTTPRoute canary-task]  ← weighted routing 70/30
          ├──70%──→ Service python-service ──→ python-api (D1/11)
          └──30%──→ Service nginx ──────────→ nginx
 ```
@@ -50,13 +50,13 @@ done | sort | uniq -c
 
 ```sh
 # 50/50
-kubectl patch httproute canary-demo --type=json -p='[
+kubectl patch httproute canary-task --type=json -p='[
   {"op":"replace","path":"/spec/rules/0/backendRefs/0/weight","value":50},
   {"op":"replace","path":"/spec/rules/0/backendRefs/1/weight","value":50}
 ]'
 
 # 100% nginx
-kubectl patch httproute canary-demo --type=json -p='[
+kubectl patch httproute canary-task --type=json -p='[
   {"op":"replace","path":"/spec/rules/0/backendRefs/0/weight","value":0},
   {"op":"replace","path":"/spec/rules/0/backendRefs/1/weight","value":100}
 ]'

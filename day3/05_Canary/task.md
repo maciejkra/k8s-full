@@ -4,6 +4,9 @@ Wymaga Gateway API z D2/07 (`training-gateway`, `Programmed=True`) oraz aplikacj
 
 Cel: rozłożyć ruch przez jeden `HTTPRoute` z `backendRefs[].weight` — **70% na python-api, 30% na nginx**.
 
+> Zadanie jest niezależne od demo z `canary-demo/` — inna nazwa HTTPRoute (`canary-task`)
+> i inny hostname (`canary.` vs `canary-demo.`), więc oba mogą stać w klastrze naraz.
+
 ## Część 1 — dwa backendy
 
 1. Upewnij się, że python-api z D1/11 działa (Service `python-service`).
@@ -18,7 +21,7 @@ Napisz `HTTPRoute` na `training-gateway` z dwoma `backendRefs`: `python-service:
 
 ```sh
 kubectl apply -f solution/httproute-canary.yaml
-kubectl describe httproute canary-demo   # Accepted=True, ResolvedRefs=True
+kubectl describe httproute canary-task   # Accepted=True, ResolvedRefs=True
 ```
 
 ## Część 3 — test rozkładu
@@ -34,7 +37,7 @@ done | sort | uniq -c
 
 Zmień weighty (np. 50/50, potem 0/100), re-apply i ponów pomiar — zmiana jest natychmiastowa, bez restartu Podów:
 ```sh
-kubectl patch httproute canary-demo --type=json -p='[
+kubectl patch httproute canary-task --type=json -p='[
   {"op":"replace","path":"/spec/rules/0/backendRefs/0/weight","value":50},
   {"op":"replace","path":"/spec/rules/0/backendRefs/1/weight","value":50}
 ]'

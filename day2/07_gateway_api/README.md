@@ -4,7 +4,7 @@
 Wystawić aplikację python-api (z D1/11) przez Gateway API. Rdzeń ćwiczenia jest w `task.md`. Sekcje „Opcjonalne" niżej (routing po domenie, URLRewrite, TLS, cert-manager) to rozszerzenia dla chętnych.
 
 ## Kontekst
-Gateway API (GA od K8s 1.29) zastępuje Ingress. Trzy CRD-y, trzy role:
+Gateway API zastępuje Ingress. GA (v1.0) od października 2023 — to osobny projekt SIG-Network, wersjonowany niezależnie od Kubernetesa (dziś v1.6.1), instalowany jako CRD-y, a nie część core API. Trzy CRD-y, trzy role:
 - `GatewayClass` — implementacja (Envoy, NGINX, Cilium, …) — infra admin
 - `Gateway` — instancja LB z portami i listenerami — cluster operator
 - `HTTPRoute` (lub `TCPRoute`, `TLSRoute`, `GRPCRoute`) — reguły routingu — app dev
@@ -18,23 +18,28 @@ Routing i filtry (rewrite, redirect, modyfikacja nagłówków) są w `spec`, nie
 
 ## Setup Envoy Gateway — wybierz swój runtime
 
-Krok wspólny dla KAŻDEGO runtime — zainstaluj kontroler:
+Krok wspólny dla Kind / Docker Desktop / K3d — zainstaluj kontroler. Helma poznajemy dopiero
+w `day5/02_helm`, więc tu zwykły `kubectl apply` (Envoy Gateway publikuje `install.yaml`
+w release assets):
 ```bash
-helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm \
-  --version v1.3.2 -n envoy-gateway-system --create-namespace
+kubectl apply --server-side -f https://github.com/envoyproxy/gateway/releases/download/v1.9.0/install.yaml
 kubectl wait --timeout=5m -n envoy-gateway-system \
   deployment/envoy-gateway --for=condition=Available
 ```
-Chart to OCI artifact z Docker Hub (stąd `oci://`, nie `helm repo add`). Instalacja tworzy `GatewayClass eg`. Dalej wykonaj kroki TYLKO dla swojego runtime:
+`install.yaml` zawiera CRD-y Gateway API (bundle v1.6.1) + Envoy Gateway. **Nie** tworzy
+`GatewayClass` — robi to `gateway-http.yaml` niżej. Dalej wykonaj kroki TYLKO dla swojego runtime.
+
+> Gdyby `install.yaml` v1.9.0 sprawiał kłopoty, poprzednia stabilna linia to
+> `v1.8.3` — ten sam URL, inny tag.
 
 ### Docker Desktop (wbudowany Kubernetes)/K3d
-LoadBalancer działa na `localhost` od ręki — nic więcej nie trzeba. Po stworzeniu Gateway `curl http://localhost/` trafia w Envoy.
+LoadBalancer działa na `localhost` od ręki — nic więcej nie trzeba. Po stworzeniu Gateway `curl http://localhost/` trafia w Envoy. Pomiń też `kubectl patch gatewayclass` z sekcji Kind.
 
 ### Kind
-Kind nie ma cloud-providera → Service typu LoadBalancer wisi w `EXTERNAL-IP=<pending>`. Trzeba NodePort + pin data-plane na control-plane:
-- `day1/04_k8s/kind.yaml` mapuje host `80/443` → containerPort `30080/30443` (tylko control-plane, label `ingress-ready=true`, taint `node-role.kubernetes.io/control-plane:NoSchedule`).
+Kind nie ma cloud-providera → Service typu LoadBalancer wisi w `EXTERNAL-IP=<pending>`. Przypinamy poda Envoya do control-plane i otwieramy na nim `hostPort`:
+- `day1/04_k8s/kind.yaml` mapuje host `80/443` → containerPort `80/443` (tylko control-plane, label `ingress-ready=true`, taint `node-role.kubernetes.io/control-plane:NoSchedule`).
 ```bash
-# EnvoyProxy CR: Service NodePort 30080/30443 + nodeSelector ingress-ready + toleration
+# EnvoyProxy CR: hostPort 80/443 + nodeSelector ingress-ready + toleration
 kubectl apply -f envoyproxy-kind.yaml
 
 # Podepnij CR pod GatewayClass eg
@@ -44,14 +49,16 @@ kubectl patch gatewayclass eg --type=merge -p '{
     "name": "kind-control-plane", "namespace": "envoy-gateway-system"}}}'
 ```
 
-### Managed (DOKS / EKS / GKE / Cilium CNI)
-CRD-y Gateway API zwykle już są w klastrze → dorzuć `--skip-crds` do `helm install` (inaczej Server-Side Apply conflict). Cloud LoadBalancer nada publiczny `EXTERNAL-IP`:
+### Managed (DOKS / EKS / GKE) — nie instaluj Envoy Gateway
+Na klastrze zarządzanym z własnym Gateway API **kontrolera nie instalujesz w ogóle**. Sprawdź, co już jest:
 ```bash
-helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm \
-  --version v1.3.2 --skip-crds -n envoy-gateway-system --create-namespace
-kubectl get svc -n envoy-gateway-system   # EXTERNAL-IP = publiczny IP
+kubectl get gatewayclass
 ```
-Pinuj stabilny tag (`v1.3.x`) — `v0.0.0-latest` wymaga channel `experimental` (m.in. `TLSRoute` w `v1`), którego managed K8s w channel `standard` nie ma.
+Na **DigitalOcean (DOKS)** zobaczysz `cilium  io.cilium/gateway-controller  Accepted=True` — wbudowany Cilium z włączonym Gateway API. Wystarczy `Gateway` z `gatewayClassName: cilium`, a DO sam nada mu publiczny `EXTERNAL-IP` (Service `cilium-gateway-<nazwa>`).
+
+Instalacja Envoy Gateway na DOKS **padnie**: DO pinuje własne CRD-y Gateway API (bundle `v1.2.1`, field manager `c3`), a `install.yaml` v1.9.0 przynosi `v1.6.1` — Server-Side Apply kończy się `Apply failed ... conflicts with "c3"`. `--skip-crds` (Helm) tego nie ratuje, bo Envoy Gateway trzyma CRD-y w `templates/`, nie w `crds/`.
+
+Gotowy, przetestowany przepis dla DOKS (HTTP → Let's Encrypt → HTTPS) jest niżej w sekcji **„TLS przez cert-manager"**.
 
 ## Sanity check — `curl http://localhost/` zwraca stronę
 ```bash
@@ -61,7 +68,7 @@ kubectl apply -f gateway-http.yaml -f app.yaml -f httproute-welcome.yaml
 kubectl wait --for=condition=Programmed gateway/training-gateway --timeout=2m
 curl -s http://localhost/ | head -3
 ```
-`httproute-welcome.yaml` to catch-all (bez `hostnames`) — matchuje każdy Host header. Route'y z konkretnym hostname wygrywają nad nim (most-specific match).
+`httproute-welcome.yaml` to catch-all (bez `hostnames`) — matchuje każdy Host header. Route'y z konkretnym hostname wygrywają nad nim (most-specific match), więc może zostać w klastrze.
 
 ---
 
@@ -102,33 +109,89 @@ kubectl create secret tls app-tls --cert=/tmp/tls.crt --key=/tmp/tls.key \
   --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f gateway-https.yaml -f httproute-domain.yaml
 curl -kv https://python.127-0-0-1.nip.io/api/v1/info 2>&1 | grep -E "subject|issuer|HTTP/"
+# subject == issuer  => self-signed
 ```
 Listener `tls.mode: Terminate` + `certificateRefs`. Envoy ładuje Secret i terminuje TLS. Rotacja: podmiana Secret → Envoy przeładowuje cert.
 
-### TLS przez cert-manager (Let's Encrypt staging)
-Najpierw zainstaluj cert-manager:
-```bash
-helm repo add jetstack https://charts.jetstack.io
-helm repo update
-helm upgrade --install cert-manager jetstack/cert-manager \
-  -n cert-manager --create-namespace \
-  --set crds.enabled=true \
-  --set config.apiVersion=controller.config.cert-manager.io/v1alpha1 \
-  --set config.kind=ControllerConfiguration \
-  --set config.enableGatewayAPI=true
-kubectl wait --timeout=5m -n cert-manager deployment/cert-manager --for=condition=Available
-```
-`crds.enabled=true` — bez tego `apply -f certificate.yaml` padnie z `no matches for kind "Certificate"`. `config.enableGatewayAPI=true` — bez tego `gateway-shim` jest wyłączony i Challenge wisi z `gateway api is not enabled` (w v1.20 to nie feature gate, lecz `ControllerConfiguration`).
+### TLS przez cert-manager + Let's Encrypt (wymaga PUBLICZNEGO IP)
 
+HTTP-01 wymaga, by Let's Encrypt dotarł do Twojego IP z internetu — z `127.0.0.1` nie zadziała. Poniższy przepis jest przetestowany na **DOKS** (wbudowany Cilium, bez Envoy Gateway — patrz sekcja „Managed" wyżej).
+
+**1) Gateway na `cilium` — DO nada publiczny EXTERNAL-IP**
+```bash
+kubectl apply -f ../../day1/11_deployment/solution/   # python-api + redis
+kubectl apply -f - <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: { name: training-gateway, namespace: default }
+spec:
+  gatewayClassName: cilium
+  listeners:
+    - { name: http, protocol: HTTP, port: 80, allowedRoutes: { namespaces: { from: All } } }
+EOF
+kubectl wait --for=condition=Programmed gateway/training-gateway --timeout=5m
+IP=$(kubectl get gateway training-gateway -o jsonpath='{.status.addresses[0].value}')
+echo $IP
+```
+
+**2) cert-manager (też bez Helma) + solver Gateway**
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.1/cert-manager.yaml
+kubectl wait --timeout=5m -n cert-manager \
+  deployment/cert-manager deployment/cert-manager-webhook --for=condition=Available
+
+kubectl -n cert-manager patch deploy cert-manager --type=json \
+  -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-gateway-api"}]'
+kubectl -n cert-manager rollout status deploy/cert-manager
+```
+Bez flagi `--enable-gateway-api` `gateway-shim` jest wyłączony i Challenge wisi w `pending` z `gateway api is not enabled`.
+
+**3) HTTPRoute + pre-flight HTTP-01**
+
+W `httproute.yaml` podmień `<GATEWAY-IP>` na IP z kroku 1 (`hostnames`), potem:
+```bash
+kubectl apply -f httproute.yaml
+curl -s -o /dev/null -w "%{http_code}\n" http://python.$IP.nip.io/.well-known/acme-challenge/probe
+# 404 z backendu = ścieżka drożna. refused/timeout => NIE wystawiaj certu (rate limit LE!)
+```
+
+**4) Certificate (issuer `letsencrypt-prod`)**
+
+W `certificate.yaml` podmień `<GATEWAY-IP>` na to samo IP (`dnsNames` musi się zgadzać
+z `hostnames` w `httproute.yaml`), potem:
 ```bash
 kubectl apply -f cluster-issuer-letsencrypt.yaml
-# Edytuj certificate.yaml — własna nip.io z PUBLICZNYM IP
 kubectl apply -f certificate.yaml
-kubectl wait --for=condition=Ready certificate/app-tls --timeout=5m
-kubectl apply -f gateway-https.yaml
-curl -k https://python.<TWOJ-IP>.nip.io/api/v1/info
+kubectl wait --for=condition=Ready certificate/app-tls --timeout=5m   # ~40 s
 ```
-HTTP-01 wymaga, by Let's Encrypt dotarł do Twojego IP z internetu — z `127.0.0.1` nie zadziała (potrzebny publiczny IP: `cloudflared tunnel`/`ngrok`, lub DNS-01). Rate limit `letsencrypt-prod`: 50 cert/tydzień/domena — iteruj na `letsencrypt-staging` (`cluster-issuer-letsencrypt.yaml` definiuje oba).
+
+**5) Listener HTTPS — Cilium terminuje TLS Secretem `app-tls`**
+```bash
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: { name: training-gateway, namespace: default }
+spec:
+  gatewayClassName: cilium
+  listeners:
+    - { name: http, protocol: HTTP, port: 80, allowedRoutes: { namespaces: { from: All } } }
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: python.$IP.nip.io
+      tls: { mode: Terminate, certificateRefs: [ { kind: Secret, name: app-tls } ] }
+      allowedRoutes: { namespaces: { from: All } }
+EOF
+
+curl -sv https://python.$IP.nip.io/api/v1/info 2>&1 | grep -iE 'issuer:|subject:'
+# issuer: C=US; O=Let's Encrypt  ->  zaufany łańcuch, curl BEZ -k
+```
+
+> `cluster-issuer-letsencrypt.yaml` definiuje oba issuery. Powyższy przepis idzie od razu na
+> `letsencrypt-prod` (zielona kłódka bez `-k`) — ceną jest limit **5 nieudanych walidacji na
+> godzinę na hostname**, stąd pre-flight `curl` w kroku 3. Jeśli iterujesz nad konfiguracją,
+> przełącz `issuerRef` w `certificate.yaml` na `letsencrypt-staging`
+> (cert niezaufany, `curl -k`, ale limity dużo wyższe).
 
 ## Linki
 - [Gateway API spec](https://gateway-api.sigs.k8s.io/)

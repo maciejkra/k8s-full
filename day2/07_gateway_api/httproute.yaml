@@ -1,4 +1,4 @@
-# HTTPRoute dla TLS demo (Część 3) — kieruje do Python z D1/10 na domenie z cert-manager
+# HTTPRoute dla demo TLS/Let's Encrypt — kieruje do python-api (D1/11) na publicznej domenie nip.io
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -7,7 +7,7 @@ spec:
   parentRefs:
     - name: training-gateway
   hostnames:
-    - python.<TWOJ-PUBLICZNY-IP>.nip.io   # ZMIEŃ — musi się zgadzać z certificate.yaml
+    - python.<GATEWAY-IP>.nip.io   # ZMIEŃ — musi się zgadzać z certificate.yaml
   rules:
     - matches:
         - path:

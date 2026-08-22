@@ -9,4 +9,4 @@ https://github.com/ContainerSolutions/k8s-deployment-strategies
 4. Run curl on the HTTPRoute hostname (for example `api.127-0-0-1.nip.io`) and check if it works
 
 > Wymaga Gateway API z `day2/07_gateway_api` (`training-gateway`, `Programmed=True`).
-> Gotowe manifesty weighted HTTPRoute: `solution/`. Szczegóły i progresywny rollout: `task.md`, `strategies.md`.
+> Gotowe manifesty weighted HTTPRoute: `solution/`. Szczegóły i progresywny rollout: `task.md`. Pozostałe strategie wdrożeń: `day1/11_deployment/strategies/`.

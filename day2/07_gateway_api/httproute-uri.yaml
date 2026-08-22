@@ -8,7 +8,7 @@ spec:
   hostnames:
     - demo.127-0-0-1.nip.io
   rules:
-    # /api/* → Python z D1/10 (Service :80 → pod :5002 przez targetPort)
+    # /api/* → python-api z D1/11 (Service :80 → pod :5002 przez targetPort)
     - matches:
         - path:
             type: PathPrefix
