@@ -1,50 +1,43 @@
-# EnvoyProxy + GatewayClass override dla DigitalOcean setupu z 03_install.
+# EnvoyProxy + GatewayClass override dla setupu DigitalOcean z tego katalogu (06_install).
 #
-# Problem: domyślnie Envoy Gateway tworzy data plane jako Deployment z Service
-# typu LoadBalancer. W kubeadm na DO bez cloud-controller-managera Service
-# LoadBalancer zostaje EXTERNAL-IP=<pending> — DO LB control_plane_lb (z
-# terraform/main.tf) forwarduje 80/443 → CP nodes, więc data plane MUSI być
-# na CP nodes i bind hostport 80/443.
+# Problem: domyślnie Envoy Gateway wystawia data plane przez Service typu
+# LoadBalancer. Na kubeadm bez cloud-controller-managera DO nie nada mu adresu —
+# Service zostaje na zawsze w EXTERNAL-IP=<pending>. Ruch z internetu wchodzi
+# przez `control-plane-lb` z terraform/main.tf, który forwarduje 80/443 na
+# droplety otagowane `control-plane`.
 #
-# Rozwiązanie: EnvoyProxy CR z DaemonSet (po jednym Pod na każdy CP),
-# hostNetwork=true (bind na host:80/host:443), tolerations + nodeSelector
-# żeby schedulować TYLKO na CP. GatewayClass `eg` dostaje parametersRef do
-# tego EnvoyProxy.
+# Rozwiązanie: Service typu NodePort ze stałymi portami 30080/30443, a DO LB
+# celuje w te porty (target_port w terraform/main.tf). Data plane jako DaemonSet
+# przypięty do CP nodes, bo Envoy Gateway ustawia na Service
+# `externalTrafficPolicy: Local` — odpowiada tylko node, na którym jest Pod.
+# LB celuje wyłącznie w droplety otagowane `control-plane`, więc na każdym z nich
+# musi stać Pod Envoya (przy zwykłym Deployment ruch przez LB dostaje connection
+# refused ze wszystkich CP poza tym jednym, gdzie akurat wylądował Pod).
 #
-# Apply po `helm install eg oci://docker.io/envoyproxy/gateway-helm` (Część 8).
+# DLACZEGO NIE hostNetwork: Cilium instaluje własny DaemonSet `cilium-envoy`,
+# który działa z hostNetwork i trzyma abstrakcyjne gniazdo
+# `@envoy_domain_socket_parent_0` (base_id=0 Envoya). Drugi Envoy w przestrzeni
+# nazw sieci hosta nie zbinduje tej nazwy i wpada w CrashLoopBackOff:
+#   unable to bind domain socket with base_id=0, id=0, errno=98
+#
+# DLACZEGO NIE hostPort: Cilium implementuje hostPort dopiero z włączonym
+# kubeProxyReplacement. Tutaj działa zwykły kube-proxy, w /etc/cni/net.d nie ma
+# plugina `portmap`, więc Pody wstają, ale na hoście NIC nie nasłuchuje na :80.
+#
+# Apply po instalacji Envoy Gateway — patrz README, sekcja „Gateway API".
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: EnvoyProxy
 metadata:
   name: control-plane-envoy
   namespace: envoy-gateway-system
 spec:
-  # KLUCZOWE: bez tego Envoy Gateway przesuwa porty privileged (1-1023) na
-  # ephemeral (80→10080, 443→10443) żeby uniknąć CAP_NET_BIND_SERVICE.
-  # W hostNetwork=true to znaczy że host port 80/443 BĘDZIE PUSTY — DO LB
-  # forwarduje :80→:80 i pukałby w pustkę. Z tym = bind 80/443 jak listener.
-  # Ref: https://github.com/envoyproxy/gateway/blob/v1.7.2/api/v1alpha1/envoyproxy_types.go (UseListenerPortAsContainerPort)
-  useListenerPortAsContainerPort: true
   provider:
     type: Kubernetes
     kubernetes:
-      # DaemonSet zamiast Deployment — jeden Pod per CP node.
+      # DaemonSet zamiast Deployment — jeden Pod na każdy CP node.
       envoyDaemonSet:
-        # hostNetwork i dnsPolicy NIE są polami w KubernetesPodSpec schema
-        # v1.7.2 — ustawiamy przez StrategicMerge patch na poziomie template
-        # DaemonSet'a. dnsPolicy: ClusterFirstWithHostNet wymagane bo Envoy
-        # bootstrap odpytuje xDS po `envoy-gateway.envoy-gateway-system.svc`
-        # — z hostNetwork pod używałby DNS hosta zamiast CoreDNS.
-        # Ref: https://github.com/envoyproxy/gateway/blob/v1.7.2/api/v1alpha1/shared_types.go (KubernetesPodSpec)
-        patch:
-          type: StrategicMerge
-          value:
-            spec:
-              template:
-                spec:
-                  hostNetwork: true
-                  dnsPolicy: ClusterFirstWithHostNet
         pod:
-          # Pozwala schedulować na CP mimo NoSchedule taintu kubeadm 1.35+.
+          # Pozwala schedulować na CP mimo NoSchedule taintu kubeadm.
           tolerations:
             - key: node-role.kubernetes.io/control-plane
               operator: Exists
@@ -52,18 +45,28 @@ spec:
           # Wymusza schedule TYLKO na CP — worker nie dostaje Pod'a.
           nodeSelector:
             node-role.kubernetes.io/control-plane: ""
-      # Service ClusterIP — używamy hostNetwork, external IP nieistotny
-      # (ruch wchodzi przez DO LB → CP host:80/443 bezpośrednio).
       envoyService:
-        type: ClusterIP
+        type: NodePort
+        # Stałe nodePorty — muszą się zgadzać z target_port w terraform/main.tf.
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+                - name: http-80
+                  port: 80
+                  nodePort: 30080
+                - name: https-443
+                  port: 443
+                  nodePort: 30443
 ---
 # Override default GatewayClass `eg` (z day2/07_gateway_api/gateway-http.yaml).
 # Dodajemy parametersRef żeby Envoy Gateway controller użył naszej EnvoyProxy
-# (DaemonSet/hostNetwork/CP) zamiast default Deployment+LoadBalancer.
+# (NodePort) zamiast default LoadBalancer.
 #
-# UWAGA: Jeśli w sesji D2/07 zaapliujesz `kubectl apply -f gateway-http.yaml`,
-# ten plik NADPISZE GatewayClass `eg` bez parametersRef. Wtedy re-apply tego
-# pliku: `kubectl apply -f envoy-proxy.yaml` — przywraca parametersRef.
+# UWAGA: Jeśli zaaplikujesz `kubectl apply -f gateway-http.yaml` z D2/07,
+# nadpisze on GatewayClass `eg` bez parametersRef. Wtedy re-apply tego pliku:
+# `kubectl apply -f envoy-proxy.yaml` — przywraca parametersRef.
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:

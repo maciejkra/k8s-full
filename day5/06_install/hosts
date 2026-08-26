@@ -1,3 +1,5 @@
+# Generowany przez terraform (null_resource.hosts_file) — poniższe adresy są
+# z poprzedniego szkolenia i zostaną nadpisane przy `terraform apply`.
 10.135.0.5 cpnode1.example.com cpnode1
 10.135.0.7 cpnode2.example.com cpnode2
 10.135.0.3 cpnode3.example.com cpnode3

@@ -146,7 +146,74 @@ On one control-plane node run `kube-vip.sh` script (edit first `VIP_IF` & `VIP_I
 
 Have FUN!
 
+## Gateway API (Envoy Gateway)
+
+Na kubeadm bez cloud-controller-managera Service typu `LoadBalancer` nigdy nie dostanie
+adresu — zostaje `EXTERNAL-IP=<pending>`. Wejściem z internetu jest `control-plane-lb`
+z terraform: forwarduje `:80` → `:30080` i `:443` → `:30443` na dropletach otagowanych
+`control-plane`. `envoy-proxy.yaml` ustawia data plane Envoya tak, żeby tam odpowiadał
+(DaemonSet na CP + Service NodePort na tych portach).
+
+Skopiuj plik na cpnode1 — terraform wysyła tylko `prepare.sh`, `kubeadm-config.yaml`,
+`kube-vip.sh` i katalog `kubernetes/`:
+```sh
+scp envoy-proxy.yaml root@<cpnode1>:/root/
+```
+
+Na cpnode1:
+```sh
+kubectl apply --server-side -f https://github.com/envoyproxy/gateway/releases/download/v1.9.0/install.yaml
+kubectl wait --timeout=5m -n envoy-gateway-system \
+  deployment/envoy-gateway --for=condition=Available
+
+kubectl apply -f envoy-proxy.yaml
+kubectl get gatewayclass eg      # ACCEPTED=True
+```
+
+Backend, Gateway i HTTPRoute:
+```sh
+kubectl create deployment web --image=nginx:1.27-alpine --replicas=2
+kubectl expose deployment web --port=80
+
+kubectl apply -f - <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: { name: training-gateway, namespace: default }
+spec:
+  gatewayClassName: eg
+  listeners:
+    - { name: http, protocol: HTTP, port: 80, allowedRoutes: { namespaces: { from: All } } }
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: web, namespace: default }
+spec:
+  parentRefs: [ { name: training-gateway } ]
+  rules:
+    - backendRefs: [ { name: web, port: 80 } ]
+EOF
+
+kubectl wait --for=condition=Programmed gateway/training-gateway --timeout=5m
+kubectl -n envoy-gateway-system get pods -o wide   # po jednym Podzie na KAŻDYM CP
+```
+
+Test z dowolnej maszyny — publiczny IP LoadBalancera DO:
+```sh
+curl http://<IP-LB>/
+# <title>Welcome to nginx!</title>
+```
+
+> Pułapki tego setupu są opisane w komentarzach `envoy-proxy.yaml`: nie da się użyć
+> `hostNetwork` (kolizja z `cilium-envoy` o gniazdo `base_id=0`) ani `hostPort`
+> (Cilium implementuje go dopiero z `kubeProxyReplacement`), a Pody muszą stać na
+> **każdym** CP, bo Envoy Gateway ustawia `externalTrafficPolicy: Local`.
+
 ## More fun....
+
+> UWAGA: ta instalacja ingress-nginx bierze porty 80/443 na hoście, a `control-plane-lb`
+> po zmianie z sekcji wyżej celuje w `30080/30443`. Albo używasz Gateway API, albo
+> ingress-nginx — nie obu naraz. Dla ingress-nginx cofnij `target_port` w
+> `terraform/main.tf` na 80/443.
 
 ```sh
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
