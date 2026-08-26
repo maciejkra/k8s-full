@@ -1,0 +1,46 @@
+# Redis z D1/11 przepisany z Deployment na StatefulSet.
+# Labelki muszą pasować do selektora Service'u redisa z D1/11, żeby python
+# łączył się dalej po tej samej nazwie — bez zmian w deploymencie python.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  labels:
+    szkolenie: k8s
+spec:
+  serviceName: redis-servcie      # Service z D1/11
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+      szkolenie: k8s
+  template:
+    metadata:
+      labels:
+        app: redis
+        szkolenie: k8s
+    spec:
+      containers:
+        - name: redis
+          image: redis:alpine
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+  # Każdy Pod dostaje własne PVC (data-redis-0, data-redis-1, …).
+  # Po `kubectl delete pod redis-0` wraca ten sam Pod i to samo PVC.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

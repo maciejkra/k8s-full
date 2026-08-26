@@ -53,7 +53,7 @@ rm cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
 
 
 export KUBECONFIG=/etc/kubernetes/admin.conf
-cilium install --version 1.17.6
+cilium install --version 1.20.1
 ```
 
 ## Join other CP nodes
@@ -75,12 +75,40 @@ Modify `/etc/hosts` accordingly (add to the file)
 10.135.0.7 knode3.example.com knode3
 10.135.0.100 kubeapi.example.com kubeapi
 ```
-Run `kubeadm join` command you got from the first node
+Run `kubeadm join` command you got from the first node — **add `--apiserver-advertise-address` with this node's PRIVATE ip**
 ```sh
 kubeadm join kubeapi.example.com:6443 --token 7kwnu1.zmop3tuysdmdwrhv \
 	--discovery-token-ca-cert-hash sha256:a30106570559692815bfdd008026ac0a36a91f4f997a1b563cd0995a49693dd8 \
-	--control-plane --certificate-key ead587109844cced6cdbda7743c080571e370f6061be3a7d08753f9185deee07
+	--control-plane --certificate-key ead587109844cced6cdbda7743c080571e370f6061be3a7d08753f9185deee07 \
+	--apiserver-advertise-address 10.135.0.6
 ```
+
+> **Dlaczego ta flaga jest konieczna.** `kubeadm init` na cpnode1 bierze adres z pola
+> `advertiseAddress` w `kubeadm-config.yaml`, czyli PRYWATNY — i taki trafia do SAN-ów
+> certyfikatu peer etcd:
+> `X509v3 SAN: DNS:cpnode1, DNS:localhost, IP:10.135.0.20, IP:127.0.0.1`
+>
+> `kubeadm join` nie czyta tego pliku i wybiera adres z interfejsu z **domyślną trasą** —
+> na dropletach DO to `eth0`, czyli PUBLICZNY. (Nie zależy to od `/etc/hosts`: nawet gdy
+> `kubeapi.example.com` wskazuje na adres prywatny, join i tak wybiera publiczny.)
+> Nowy członek etcd startuje więc z `--listen-peer-urls=https://<PUBLICZNY>:2380`.
+>
+> Skutek: cpnode1 łączy się do niego po publicznym IP, więc jako adres źródłowy ma własny
+> publiczny IP — a tego nie ma w jego certyfikacie. Learner odrzuca połączenie:
+> `rejected connection on peer endpoint`,
+> `tls: "138.68.93.203" does not match any of DNSNames ["cpnode1" "localhost"]`
+>
+> Ruch raft nigdy nie dochodzi, learner się nie synchronizuje i po ~2 minutach join pada na:
+> `etcdserver: can only promote a learner member which is in sync with leader`.
+> To nie jest brak łączności — TCP na publiczny `:2380` działa. To niezgodność SAN-ów,
+> wynikająca z tego, że jedna strona peeruje prywatnie, a druga publicznie.
+>
+> Wyjście z tego stanu wymaga usunięcia członka etcd na cpnode1
+> (`etcdctl member remove <id>`) i `kubeadm reset -f` na node'zie, który padł —
+> sam ponowny `join` nie wystarczy.
+>
+> Workerów to nie dotyczy: nie dokładają członka etcd, a ich kubelet i tak bierze adres
+> prywatny (rozwiązuje nazwę node'a z `/etc/hosts`).
 
 ## Join worker nodes
 Log in on to the node (ssh)

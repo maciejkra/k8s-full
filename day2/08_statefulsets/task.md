@@ -1,42 +1,20 @@
 # Zadanie
 
-Wymień Redis Deployment (z D1/11 Python+Redis) na Redis StatefulSet z dedykowanym storage przez `volumeClaimTemplates` (mount `/data`, AOF persistence).
+Przepisz Redisa z D1/11 z `Deployment` na `StatefulSet`.
 
-## Kroki
-
-1. Cleanup starego Redis z D1/11:
-   ```bash
-   kubectl delete deployment redis
-   kubectl delete service redis-service 2>/dev/null || true
-   ```
-
-2. Wdróż `redis.statefulset.yaml` — Pod powinien nazywać się `redis-0` (nie losowy hash):
-   ```bash
-   kubectl apply -f redis.statefulset.yaml
+1. Skasuj `Deployment` redis z D1/11. Service zostaw — python ma się dalej łączyć bez zmian.
+2. Napisz `StatefulSet` redis: obraz `redis:alpine`, te same labelki co w selektorze Service'u
+   redisa, storage per Pod przez `volumeClaimTemplates` zamontowany w `/data`.
+3. Sprawdź, że Pod nazywa się `redis-0` (nie losowy hash) i że python nadal działa:
+   ```sh
    kubectl get pod -l app=redis
-   # redis-0    1/1   Running
+   curl <ip>:<port>/api/v1/info
    ```
+4. Zrób kilka `POST` na `/api/v1/info`, skasuj Poda (`kubectl delete pod redis-0`)
+   i sprawdź licznik po jego powrocie.
 
-3. Zweryfikuj, że Python (z D1/11) nadal się łączy:
-   ```bash
-   kubectl logs deploy/python --tail=20
-   # brak errorów connection refused
-   ```
+Rozwiązanie: `solution/redis.statefulset.yaml`.
 
-4. Wykonaj kilka `POST` na `/api/v1/info` (licznik), potem `kubectl delete pod redis-0`. Po odtworzeniu Poda licznik przetrwa — dzięki AOF + PVC.
-
-5. Skala-up do 3 replik — obserwuj sekwencyjne powstawanie Podów:
-   ```bash
-   kubectl scale sts/redis --replicas=3
-   kubectl get pods -l app=redis -w
-   ```
-
-6. Wypisz PVC po skalowaniu (`kubectl get pvc`). Przy `kubectl scale --replicas=1` PVC pozostają (default `Retain`).
-
-## Bazowe demo (pierwszy StatefulSet)
-
-`nginx.statefulset.yaml` to prostszy przykład — repliki nginx z dedykowanym storage per Pod. Różnice vs Deployment:
-- Pody startują sekwencyjnie (`nginx-0` → Ready → `nginx-1` → …)
-- Pod ma stałe imię (po `delete pod` wraca z tym samym numerem)
-- Z innego Poda: `curl nginx-1.<headless-service>` — DNS per Pod
-- `kubectl scale --replicas=N` usuwa Pod z najwyższym ordinal
+EXTRA:
+* Przeskaluj do 3 replik i zobacz, w jakiej kolejności powstają Pody.
+* Zejdź z powrotem do 1 repliki — co się stało z PVC?
