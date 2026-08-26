@@ -218,29 +218,3 @@ curl http://<IP-LB>/
 > z `unable to bind domain socket ... errno=98`. Obejście przez `hostPort` też odpada,
 > bo Cilium implementuje go dopiero z `kubeProxyReplacement`. Skoro i tak włączamy
 > kube-proxy replacement, prościej użyć Gateway API wbudowanego w Cilium.
-
-## More fun....
-
-> UWAGA: ta instalacja ingress-nginx bierze porty 80/443 na hoście — dokładnie te same,
-> na których nasłuchuje L7 proxy Cilium z sekcji Gateway API. Albo jedno, albo drugie,
-> nie oba naraz.
-
-```sh
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-helm repo update
-
-helm install ingress-nginx ingress-nginx/ingress-nginx \
-  --namespace ingress-nginx --create-namespace \
-  --set controller.kind=DaemonSet \
-  --set controller.daemonset.useHostPort=true \
-  --set controller.hostNetwork=true \
-  --set controller.service.type="" \
-  --set controller.service.enabled=false \
-  --set controller.admissionWebhooks.enabled=false \
-  --set controller.extraArgs.enable-ssl-passthrough="" \
-  --set controller.nodeSelector."node-role\.kubernetes\.io/control-plane"="" \
-  --set controller.tolerations\[0\].key="node-role.kubernetes.io/control-plane" \
-  --set controller.tolerations\[0\].operator="Exists" \
-  --set controller.tolerations\[0\].effect="NoSchedule"
-```
-

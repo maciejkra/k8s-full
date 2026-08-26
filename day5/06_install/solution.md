@@ -1,7 +1,11 @@
 # Solution — 06_install
 
-## kube-vip jako static pod, nie DaemonSet
-Static pod (`/etc/kubernetes/manifests/kube-vip.yaml`): kubelet uruchamia Pod przed połączeniem z apiserver → VIP gotowy zanim kubeadm init kontaktuje apiserver. DaemonSet wstałby dopiero po gotowym apiserverze (~30s bez VIP, chicken-and-egg). Pułapka: `kubeadm join --control-plane` nie kopiuje static pod manifestów — `scp` ręcznie na każdy nowy CP przed join.
+## kube-vip jako DaemonSet
+Tu instalujemy kube-vip DaemonSetem (`kube-vip.sh`) i to jest wariant obowiązujący — przetestowany: 3 Pody Running, lease `plndr-cp-lock` na liderze, VIP `/32` na jego `eth1`, `curl -k https://10.135.0.100:6443/healthz` zwraca `ok`.
+
+Klasyczny argument za static podem (`/etc/kubernetes/manifests/kube-vip.yaml`) brzmi: kubelet uruchamia go zanim wstanie apiserver, więc VIP jest gotowy na moment `kubeadm init`, a DaemonSet startuje dopiero po gotowym apiserverze (chicken-and-egg). **W tym setupie to nie ma zastosowania**, bo `controlPlaneEndpoint` celuje w LoadBalancer DigitalOcean, nie w VIP — kubeadm nigdy nie czeka na kube-vip. VIP jest tu elementem dydaktycznym: pokazuje mechanizm HA, którego na DO i tak nie da się użyć jako endpointu, bo VPC blokuje GARP (patrz Troubleshooting).
+
+Gdybyś przenosił ten materiał na bare metal, gdzie VIP JEST endpointem, wtedy static pod jest konieczny — z pułapką, że `kubeadm join --control-plane` nie kopiuje manifestów static podów, więc trzeba je `scp` na każdy nowy CP przed joinem.
 
 ## Cilium kube-proxy replacement
 - kube-proxy + iptables: dla 1000+ Services = 10k+ rules, liniowe przeszukiwanie, latency ~100µs/packet.
