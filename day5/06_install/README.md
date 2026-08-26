@@ -7,8 +7,14 @@ Log in on to the node (ssh)
 
 Add virtual IP for kube-vip
 ```sh
-ip a a dev eth1 10.135.0.100/24
+ip a a dev eth1 10.135.0.100/32
 ```
+
+> Maska **/32** jest istotna. `eth1` ma już `10.135.0.x/16`; adres z maską /24 tworzy
+> bardziej szczegółową trasę i cały ruch do `10.135.0.0/24` — w tym peering etcd —
+> zaczyna wychodzić ze źródłem `10.135.0.100`, którego nie ma w SAN-ach certyfikatu.
+> Join kolejnych CP pada wtedy na `can only promote a learner member...`.
+> Sam kube-vip też nadaje ten adres jako /32 (`vip_subnet: "32"` w `kube-vip.sh`).
 
 Copy files in `kubernetes` dir into `/etc/kubernetes`
 
@@ -90,13 +96,9 @@ cilium status --wait
 > cloud-controller-managera zostałby `<pending>`). DO LB forwarduje `:80/:443` na CP node'y
 > i trafia prosto w to proxy.
 >
-> Dwie ostatnie flagi są **konieczne**, żeby listener na porcie 80 w ogóle powstał.
-> `cilium-envoy` domyślnie nie ma `NET_BIND_SERVICE`, więc nie zbinduje portu <1024.
-> Bez nich Gateway pokazuje `PROGRAMMED=True` i wygląda na sprawny, ale w logach
-> `cilium-envoy` leci w kółko:
-> `cannot bind '0.0.0.0:80': Permission denied`, a `curl` dostaje connection refused.
-> Sam `keepCapNetBindService=true` nie wystarcza — ustawia tylko flagę w `cilium-config`,
-> capability trzeba dołożyć do listy `capabilities.envoy`.
+> Dwie ostatnie flagi są **konieczne**: bez `NET_BIND_SERVICE` cilium-envoy nie zbinduje
+> portu <1024, Gateway pokazuje `PROGRAMMED=True`, a ruch dostaje connection refused.
+> Szczegóły objawu: `solution.md`.
 
 ## Join other CP nodes
 Log in on to the node (ssh)
@@ -125,32 +127,10 @@ kubeadm join kubeapi.example.com:6443 --token 7kwnu1.zmop3tuysdmdwrhv \
 	--apiserver-advertise-address 10.135.0.6
 ```
 
-> **Dlaczego ta flaga jest konieczna.** `kubeadm init` na cpnode1 bierze adres z pola
-> `advertiseAddress` w `kubeadm-config.yaml`, czyli PRYWATNY — i taki trafia do SAN-ów
-> certyfikatu peer etcd:
-> `X509v3 SAN: DNS:cpnode1, DNS:localhost, IP:10.135.0.20, IP:127.0.0.1`
->
-> `kubeadm join` nie czyta tego pliku i wybiera adres z interfejsu z **domyślną trasą** —
-> na dropletach DO to `eth0`, czyli PUBLICZNY. (Nie zależy to od `/etc/hosts`: nawet gdy
-> `kubeapi.example.com` wskazuje na adres prywatny, join i tak wybiera publiczny.)
-> Nowy członek etcd startuje więc z `--listen-peer-urls=https://<PUBLICZNY>:2380`.
->
-> Skutek: cpnode1 łączy się do niego po publicznym IP, więc jako adres źródłowy ma własny
-> publiczny IP — a tego nie ma w jego certyfikacie. Learner odrzuca połączenie:
-> `rejected connection on peer endpoint`,
-> `tls: "138.68.93.203" does not match any of DNSNames ["cpnode1" "localhost"]`
->
-> Ruch raft nigdy nie dochodzi, learner się nie synchronizuje i po ~2 minutach join pada na:
-> `etcdserver: can only promote a learner member which is in sync with leader`.
-> To nie jest brak łączności — TCP na publiczny `:2380` działa. To niezgodność SAN-ów,
-> wynikająca z tego, że jedna strona peeruje prywatnie, a druga publicznie.
->
-> Wyjście z tego stanu wymaga usunięcia członka etcd na cpnode1
-> (`etcdctl member remove <id>`) i `kubeadm reset -f` na node'zie, który padł —
-> sam ponowny `join` nie wystarczy.
->
-> Workerów to nie dotyczy: nie dokładają członka etcd, a ich kubelet i tak bierze adres
-> prywatny (rozwiązuje nazwę node'a z `/etc/hosts`).
+> Bez tej flagi kubeadm bierze adres z interfejsu z domyślną trasą — na DO publiczny.
+> etcd peeruje wtedy po publicznym IP, którego nie ma w SAN-ach certyfikatu, learner
+> nie synchronizuje się i join pada na `can only promote a learner member...`.
+> Wyjście z tego stanu i pełna analiza: `solution.md`.
 
 ## Join worker nodes
 Log in on to the node (ssh)
@@ -181,7 +161,7 @@ https://kube-vip.io
 
 Remove virtual IP for kube-vip
 ```sh
-ip a d dev eth1 10.135.0.100/24
+ip a d dev eth1 10.135.0.100/32
 ```
 
 On one control-plane node run `kube-vip.sh` script (edit first `VIP_IF` & `VIP_IP`).
