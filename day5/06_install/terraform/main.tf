@@ -2,14 +2,13 @@ resource "digitalocean_loadbalancer" "control_plane_lb" {
   name        = "control-plane-lb"
   region      = "fra1"
   
-  # 80/443 celują w nodePorty Service'u Envoy Gateway (patrz envoy-proxy.yaml).
-  # Na kubeadm bez cloud-controller-managera Service LoadBalancer zostałby
-  # <pending>, więc data plane wystawiamy przez NodePort, a ten LB jest przed nim.
+  # 80/443 trafiają wprost w porty hosta na CP node'ach — Cilium Gateway API
+  # w trybie hostNetwork wystawia tam L7 proxy (patrz README, sekcja Gateway API).
   forwarding_rule {
     entry_protocol   = "tcp"
     entry_port       = 443
     target_protocol  = "tcp"
-    target_port      = 30443
+    target_port      = 443
   }
 
   forwarding_rule {
@@ -23,7 +22,7 @@ resource "digitalocean_loadbalancer" "control_plane_lb" {
     entry_protocol   = "tcp"
     entry_port       = 80
     target_protocol  = "tcp"
-    target_port      = 30080
+    target_port      = 80
   }
 
   healthcheck {

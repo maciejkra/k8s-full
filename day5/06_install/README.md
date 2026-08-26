@@ -34,8 +34,13 @@ Modify the `kubeadm-config.yaml` file according to comments, especially:
 
 Install kubernetes components
 ```sh
-kubeadm init --config ./kubeadm-config.yaml --upload-certs
+kubeadm init --config ./kubeadm-config.yaml --upload-certs --skip-phases=addon/kube-proxy
 ```
+
+> `--skip-phases=addon/kube-proxy` — kube-proxy w ogóle nie powstaje, bo jego rolę
+> przejmuje Cilium w eBPF (`kubeProxyReplacement=true` niżej). Jest to wymagane przez
+> Cilium Gateway API. Bez tej flagi kube-proxy i Cilium instalują konkurencyjne
+> reguły dla tego samego ruchu.
 
 **Save the output `kubeadm join` commands**
 
@@ -53,8 +58,45 @@ rm cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
 
 
 export KUBECONFIG=/etc/kubernetes/admin.conf
-cilium install --version 1.20.1
 ```
+
+Gateway API to osobne CRD-y — Cilium ich nie wozi, trzeba je zainstalować przed nim:
+```sh
+GW=https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.6.1/config/crd/standard
+for crd in gatewayclasses gateways httproutes referencegrants grpcroutes backendtlspolicies tlsroutes; do
+  kubectl apply --server-side -f $GW/gateway.networking.k8s.io_$crd.yaml
+done
+```
+
+Instalacja Cilium z kube-proxy replacement i Gateway API:
+```sh
+cilium install --version 1.20.1 \
+  --set kubeProxyReplacement=true \
+  --set k8sServiceHost=<IP-LoadBalancera-DO> \
+  --set k8sServicePort=6443 \
+  --set gatewayAPI.enabled=true \
+  --set gatewayAPI.hostNetwork.enabled=true \
+  --set envoy.securityContext.capabilities.keepCapNetBindService=true \
+  --set envoy.securityContext.capabilities.envoy="{NET_ADMIN,SYS_ADMIN,NET_BIND_SERVICE}"
+
+cilium status --wait
+```
+
+> `k8sServiceHost`/`k8sServicePort` — bez kube-proxy Cilium musi sam wiedzieć, jak dobić
+> do apiservera. Podaj IP LoadBalancera (nie nazwę `kubeapi.example.com` — Pody Cilium nie
+> korzystają z `/etc/hosts` node'a).
+> `gatewayAPI.hostNetwork.enabled=true` — L7 proxy wystawia się wprost na sieci hosta,
+> więc Gateway nie potrzebuje Service'u `LoadBalancer` (a taki na kubeadm bez
+> cloud-controller-managera zostałby `<pending>`). DO LB forwarduje `:80/:443` na CP node'y
+> i trafia prosto w to proxy.
+>
+> Dwie ostatnie flagi są **konieczne**, żeby listener na porcie 80 w ogóle powstał.
+> `cilium-envoy` domyślnie nie ma `NET_BIND_SERVICE`, więc nie zbinduje portu <1024.
+> Bez nich Gateway pokazuje `PROGRAMMED=True` i wygląda na sprawny, ale w logach
+> `cilium-envoy` leci w kółko:
+> `cannot bind '0.0.0.0:80': Permission denied`, a `curl` dostaje connection refused.
+> Sam `keepCapNetBindService=true` nie wystarcza — ustawia tylko flagę w `cilium-config`,
+> capability trzeba dołożyć do listy `capabilities.envoy`.
 
 ## Join other CP nodes
 Log in on to the node (ssh)
@@ -146,28 +188,16 @@ On one control-plane node run `kube-vip.sh` script (edit first `VIP_IF` & `VIP_I
 
 Have FUN!
 
-## Gateway API (Envoy Gateway)
+## Gateway API (Cilium)
 
-Na kubeadm bez cloud-controller-managera Service typu `LoadBalancer` nigdy nie dostanie
-adresu — zostaje `EXTERNAL-IP=<pending>`. Wejściem z internetu jest `control-plane-lb`
-z terraform: forwarduje `:80` → `:30080` i `:443` → `:30443` na dropletach otagowanych
-`control-plane`. `envoy-proxy.yaml` ustawia data plane Envoya tak, żeby tam odpowiadał
-(DaemonSet na CP + Service NodePort na tych portach).
+Gateway API obsługuje tutaj **Cilium**, nie osobny kontroler — jest już w klastrze jako CNI,
+a `gatewayAPI.hostNetwork.enabled=true` z instalacji wyżej wystawia jego L7 proxy wprost na
+sieci hosta. Dzięki temu Gateway nie potrzebuje Service'u `LoadBalancer` (ten na kubeadm bez
+cloud-controller-managera zostałby `<pending>`), a DO LB forwarduje `:80/:443` prosto na CP node'y.
+To ta sama `GatewayClass cilium`, którą widzieliście na DOKS w D2/07.
 
-Skopiuj plik na cpnode1 — terraform wysyła tylko `prepare.sh`, `kubeadm-config.yaml`,
-`kube-vip.sh` i katalog `kubernetes/`:
 ```sh
-scp envoy-proxy.yaml root@<cpnode1>:/root/
-```
-
-Na cpnode1:
-```sh
-kubectl apply --server-side -f https://github.com/envoyproxy/gateway/releases/download/v1.9.0/install.yaml
-kubectl wait --timeout=5m -n envoy-gateway-system \
-  deployment/envoy-gateway --for=condition=Available
-
-kubectl apply -f envoy-proxy.yaml
-kubectl get gatewayclass eg      # ACCEPTED=True
+kubectl get gatewayclass        # cilium  io.cilium/gateway-controller  Accepted=True
 ```
 
 Backend, Gateway i HTTPRoute:
@@ -180,7 +210,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata: { name: training-gateway, namespace: default }
 spec:
-  gatewayClassName: eg
+  gatewayClassName: cilium
   listeners:
     - { name: http, protocol: HTTP, port: 80, allowedRoutes: { namespaces: { from: All } } }
 ---
@@ -194,7 +224,6 @@ spec:
 EOF
 
 kubectl wait --for=condition=Programmed gateway/training-gateway --timeout=5m
-kubectl -n envoy-gateway-system get pods -o wide   # po jednym Podzie na KAŻDYM CP
 ```
 
 Test z dowolnej maszyny — publiczny IP LoadBalancera DO:
@@ -203,17 +232,18 @@ curl http://<IP-LB>/
 # <title>Welcome to nginx!</title>
 ```
 
-> Pułapki tego setupu są opisane w komentarzach `envoy-proxy.yaml`: nie da się użyć
-> `hostNetwork` (kolizja z `cilium-envoy` o gniazdo `base_id=0`) ani `hostPort`
-> (Cilium implementuje go dopiero z `kubeProxyReplacement`), a Pody muszą stać na
-> **każdym** CP, bo Envoy Gateway ustawia `externalTrafficPolicy: Local`.
+> Dlaczego nie osobny Envoy Gateway: jego data plane musiałby stanąć na tych samych
+> node'ach co `cilium-envoy`, a dwa Envoye w sieci hosta biją się o abstrakcyjne gniazdo
+> `@envoy_domain_socket_parent_0` (`base_id=0`) — drugi wpada w CrashLoopBackOff
+> z `unable to bind domain socket ... errno=98`. Obejście przez `hostPort` też odpada,
+> bo Cilium implementuje go dopiero z `kubeProxyReplacement`. Skoro i tak włączamy
+> kube-proxy replacement, prościej użyć Gateway API wbudowanego w Cilium.
 
 ## More fun....
 
-> UWAGA: ta instalacja ingress-nginx bierze porty 80/443 na hoście, a `control-plane-lb`
-> po zmianie z sekcji wyżej celuje w `30080/30443`. Albo używasz Gateway API, albo
-> ingress-nginx — nie obu naraz. Dla ingress-nginx cofnij `target_port` w
-> `terraform/main.tf` na 80/443.
+> UWAGA: ta instalacja ingress-nginx bierze porty 80/443 na hoście — dokładnie te same,
+> na których nasłuchuje L7 proxy Cilium z sekcji Gateway API. Albo jedno, albo drugie,
+> nie oba naraz.
 
 ```sh
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
