@@ -62,14 +62,24 @@ apiServer:
       mountPath: "/etc/kubernetes/enc.yaml"
       readOnly: true
       pathType: File
-  # ZMIEŃ wszystkie poniższe: prywatne IP trzech CP, VIP kube-vip, publiczny IP
-  # DO LoadBalancera i publiczne IP CP (potrzebne, żeby dobić się kubectl z zewnątrz).
+  # ZMIEŃ wszystkie poniższe na adresy swoich node'ów.
+  # Tu wpisujemy adresy, pod którymi ktoś łączy się DO apiservera — adresy workerów
+  # są zbędne, bo nikt się do nich nie łączy.
   certSANs:
+    # === IP LoadBalancera DO — BEZ TEGO PADNIE CILIUM ===
+    # To jest cel controlPlaneEndpoint i to samo IP podajesz jako k8sServiceHost.
+    # Jeśli go tu zabraknie, kubeadm init przejdzie bez słowa, a dopiero instalacja
+    # Cilium stanie na Init:0/6 z `x509: certificate is valid for ..., not <IP LB>`.
+    - "139.59.205.196"
+    # nazwa domenowa tego samego endpointu (z pliku hosts)
+    - "kubeapi.example.com"
+    # prywatne IP trzech CP
     - "10.135.0.5"
     - "10.135.0.7"
     - "10.135.0.3"
+    # VIP kube-vip
     - "10.135.0.100"
-    - "kubeapi.example.com"
+    # publiczne IP trzech CP (żeby dobić się kubectl z laptopa wprost w node)
     - "165.22.81.139"
     - "167.71.53.137"
     - "161.35.66.7"

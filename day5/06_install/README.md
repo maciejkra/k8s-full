@@ -50,6 +50,21 @@ kubeadm init --config ./kubeadm-config.yaml --upload-certs --skip-phases=addon/k
 
 **Save the output `kubeadm join` commands**
 
+Zanim pójdziesz dalej — sprawdź, czy IP LoadBalancera jest w certyfikacie apiservera:
+```sh
+openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -ext subjectAltName \
+  | grep -q "$(grep kubeapi /etc/hosts | awk '{print $1}')" && echo OK || echo "BRAK IP LB W CERCIE"
+```
+Jeśli wyjdzie `BRAK`, dopisz to IP do `certSANs` i odtwórz certyfikat, zanim ruszysz dalej:
+```sh
+rm /etc/kubernetes/pki/apiserver.{crt,key}
+kubeadm init phase certs apiserver --config ./kubeadm-config.yaml
+mv /etc/kubernetes/manifests/kube-apiserver.yaml /root/ && sleep 15 \
+  && mv /root/kube-apiserver.yaml /etc/kubernetes/manifests/
+```
+Popraw też `certSANs` w ConfigMapie `kube-system/kubeadm-config` — to z niego kolejne CP
+biorą listę przy `kubeadm join`. Bez tego kroku instalacja Cilium stanie na `Init:0/6`.
+
 Install Network driver - Cilium
 https://docs.cilium.io/en/stable/gettingstarted/k8s-install-default/
 

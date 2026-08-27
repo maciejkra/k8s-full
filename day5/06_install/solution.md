@@ -60,6 +60,56 @@ kubectl -n kube-system exec etcd-cpnode1 -- etcdctl \
 kubeadm reset -f && rm -rf /etc/cni/net.d /var/lib/etcd
 ```
 
+## Cilium stoi na Init:0/6 — brak IP LoadBalancera w certSANs
+
+Objaw: po `cilium install` agent wisi w `Init:0/6` i restartuje się, operator w
+CrashLoopBackOff, CoreDNS w `Pending`. Wygląda na problem z siecią, ale nie jest.
+
+`Init:0/6` to pierwszy z sześciu init-kontenerów — `config`, który uruchamia
+`cilium-dbg build-config` i **łączy się z apiserverem**. Przy `kubeProxyReplacement=true`
+nie ma kube-proxy ani ClusterIP, więc jedyną drogą jest `k8sServiceHost:k8sServicePort`.
+
+Prawda jest w logach tego kontenera:
+```bash
+kubectl -n kube-system logs -l k8s-app=cilium -c config --tail=20
+```
+```
+tls: failed to verify certificate: x509: certificate is valid for
+10.96.0.1, 10.135.0.4, ..., 207.154.222.233, not 139.59.205.196
+```
+
+Czyli certyfikat apiservera nie ma w SAN-ach IP LoadBalancera — a to właśnie ten adres
+podajemy jako `k8sServiceHost`. Pułapka polega na tym, że `kubeadm init` przechodzi bez
+ostrzeżenia, a objaw wychodzi dopiero przy Cilium, kilka kroków dalej.
+
+Uwaga: `kubeapi.example.com` zwykle **jest** w certSANs i wskazuje na to samo IP — ale
+podanie nazwy zamiast IP nie pomoże, bo Pody Cilium mają własny `/etc/hosts` i nie widzą
+wpisu z node'a.
+
+Naprawa bez stawiania klastra od nowa:
+```bash
+# 1) dopisz IP LB do certSANs w kubeadm-config.yaml, potem:
+rm /etc/kubernetes/pki/apiserver.{crt,key}
+kubeadm init phase certs apiserver --config ./kubeadm-config.yaml
+
+# 2) restart statycznego Poda apiservera
+mv /etc/kubernetes/manifests/kube-apiserver.yaml /root/ && sleep 15 \
+  && mv /root/kube-apiserver.yaml /etc/kubernetes/manifests/
+
+# 3) ConfigMap w klastrze — stąd kolejne CP wezmą certSANs przy join
+kubectl -n kube-system get cm kubeadm-config -o jsonpath='{.data.ClusterConfiguration}' > cc.yaml
+#    dopisz IP LB pod certSANs, potem:
+kubectl -n kube-system create cm kubeadm-config \
+  --from-file=ClusterConfiguration=cc.yaml --dry-run=client -o yaml | kubectl apply -f -
+
+# 4) Cilium od nowa
+kubectl -n kube-system delete pod -l k8s-app=cilium
+kubectl -n kube-system rollout restart deploy/cilium-operator
+```
+
+Po restarcie apiservera LoadBalancer DO potrzebuje ~15-30 s (health check TCP 6443,
+trzy sprawdzenia co 5 s), zanim znów zacznie przepuszczać ruch.
+
 ## VIP z maską /24 rozwala peering etcd
 
 `eth1` na dropletach DO ma adres `10.135.0.x/16`. Dodanie VIP-a jako `/24`
