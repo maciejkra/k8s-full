@@ -19,14 +19,6 @@ kubectl get secret -n monitoring kube-prometheus-stack-grafana \
 
 ## Install Loki + Alloy via Helm
 
-`grafana/loki-stack` jest **wycofany** (ostatnie wydanie to znacznik deprecacji z
-października 2025, wiezie Loki 2.9.3 przy aktualnym 3.6). Razem z nim wycofany został
-`promtail` — **EOL od 2 marca 2026**, następcą jest Grafana Alloy. Samodzielny chart
-`grafana` też jest wycofany, ale go nie potrzebujemy: Grafana przyszła z
-`kube-prometheus-stack`.
-
-Zostają więc dwa komponenty — backend i kolektor:
-
 ```sh
 helm repo add grafana https://grafana.github.io/helm-charts
 helm repo update
@@ -51,13 +43,8 @@ Dodaj w Grafanie data source typu **Loki** pod adresem:
 http://loki-gateway.loki.svc.cluster.local/
 ```
 
-> Uwaga: to inny adres niż przy starym `loki-stack` (`loki.loki.svc.cluster.local:3100`) —
-> zmieniła się nazwa Service'u i nie podajemy portu. Chart wypisuje ten adres w NOTES
-> po instalacji.
-
 Sprawdź w Grafanie → Explore → Loki, np. `{namespace="kube-system"}`.
 
 ## Linki
 - [Loki Helm chart](https://grafana.com/docs/loki/latest/setup/install/helm/)
-- [Migracja Promtail → Alloy](https://grafana.com/docs/loki/latest/send-data/promtail/)
-- [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack)
+- [Grafana Alloy](https://grafana.com/docs/alloy/latest/)

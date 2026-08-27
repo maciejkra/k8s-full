@@ -1,9 +1,9 @@
-# Grafana Alloy — nastepca Promtaila (EOL od 2 marca 2026).
+# Grafana Alloy — kolektor logow Podow.
 #
 # loki.source.kubernetes czyta logi przez API Kubernetesa, a nie z dysku node'a.
 # Dlatego Alloy zbiera logi Podow z CALEGO klastra, takze z control-plane, mimo ze
-# DaemonSet nie ma tam Poda (brak tolerancji na taint). Promtail tailowal pliki
-# i wymagal Poda na kazdym wezle plus montowan z hosta.
+# DaemonSet nie ma tam Poda (brak tolerancji na taint). Kolektory czytajace pliki
+# z dysku wymagaja Poda na kazdym wezle plus montowan z hosta.
 controller:
   type: daemonset
 alloy:
